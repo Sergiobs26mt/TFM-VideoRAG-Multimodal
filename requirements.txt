@@ -1,0 +1,26 @@
+# --- Integración con Google Gemini (Embeddings Multimodales) ---
+google-genai>=0.3.0
+
+# --- Gestión de Entorno y Variables ---
+python-dotenv>=1.0.1
+jupyterlab>=4.0.0
+notebook>=7.0.0
+
+# --- Análisis y Manipulación de Datos ---
+pandas>=2.0.0
+numpy>=1.24.0
+
+# --- Procesamiento Multimedia (Fase de Ingestión) ---
+# OpenCV es el estándar para leer y extraer frames de vídeo
+opencv-python-headless>=4.8.0
+
+# --- Calidad de Código y Testing (DevTools) ---
+pytest>=7.4.0      # Framework para hacer tests automatizados
+ruff>=0.1.0        # Linter y Formatter ultrarrápido (sustituye a flake8/black)
+mypy>=1.6.0        # Analizador de tipado estático
+
+# --- Base de Datos Vectorial (Retrieval) ---
+qdrant-client>=1.10.0
+
+# --- Interfaz de Usuario (UI) ---
+streamlit>=1.30.0
