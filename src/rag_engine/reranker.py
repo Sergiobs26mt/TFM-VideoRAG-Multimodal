@@ -19,10 +19,45 @@ from src.processing.keyframe_cache import (
     load_chunk_keyframes_jpeg,
     save_chunk_keyframes_jpeg,
 )
-from src.processing.video_chunker import encode_frame_jpeg, extract_interval_frames
+from src.processing.video_chunker import (
+    encode_frame_jpeg,
+    extract_interval_frames,
+    resize_frame,
+)
 from src.utils.gemini_client import call_with_retry, create_gemini_client
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_evaluations_json(raw_json: str) -> list[dict[str, Any]]:
+    """Parsea la lista JSON de evaluaciones o recupera los objetos completos si hubo truncamiento."""
+    try:
+        parsed = json.loads(raw_json)
+        if not isinstance(parsed, list):
+            raise TypeError("La respuesta de Gemini no es una lista JSON.")
+        return [item for item in parsed if isinstance(item, dict)]
+    except json.JSONDecodeError:
+        decoder = json.JSONDecoder()
+        recovered: list[dict[str, Any]] = []
+        pos = 0
+        while True:
+            brace = raw_json.find("{", pos)
+            if brace == -1:
+                break
+            try:
+                obj, end = decoder.raw_decode(raw_json, brace)
+                if isinstance(obj, dict) and "candidate_index" in obj:
+                    recovered.append(obj)
+                pos = end
+            except json.JSONDecodeError:
+                pos = brace + 1
+        if recovered:
+            logger.warning(
+                "Respuesta JSON truncada; recuperadas %d evaluaciones completas.",
+                len(recovered),
+            )
+            return recovered
+        raise
 
 
 class MultimodalReranker:
@@ -32,8 +67,8 @@ class MultimodalReranker:
         self,
         model: str = RERANKER_MODEL,
         api_key: str | None = None,
-        max_retries: int = 3,
-        retry_base_delay: float = 1.0,
+        max_retries: int = 4,
+        retry_base_delay: float = 1.5,
         target_width: int = 384,
         jpeg_quality: int = 80,
     ) -> None:
@@ -64,9 +99,10 @@ class MultimodalReranker:
                 f"El usuario busca: '{query}'.\n"
                 f"A continuación se presentan {len(candidates)} fragmentos de vídeo candidatos "
                 "recuperados previamente mediante similitud vectorial.\n"
-                "Para cada candidato se proporciona su fotograma central representativo.\n\n"
+                "Para cada candidato se proporcionan sus fotogramas clave representativos "
+                "(como imagen individual o tira vertical con inicio, mitad y fin del fragmento).\n\n"
                 "Instrucciones de evaluación:\n"
-                "1. Determina si en el fotograma aparece realmente lo que pide la consulta.\n"
+                "1. Determina si en alguno de los fotogramas o paneles del candidato aparece realmente lo que pide la consulta.\n"
                 "2. Asigna 'is_relevant': true solo si el contenido cumple claramente la consulta. "
                 "Si es un concepto no relacionado (por ejemplo, células en lugar de un animal), marca false.\n"
                 "3. Asigna 'relevance_score' entre 0.0 y 1.0 (1.0 = certeza total, 0.0 = totalmente no relacionado).\n"
@@ -123,9 +159,7 @@ class MultimodalReranker:
 
         try:
             raw_json = await self._call_gemini_with_retry(contents)
-            evaluations = json.loads(raw_json)
-            if not isinstance(evaluations, list):
-                raise TypeError("La respuesta de Gemini no es una lista JSON.")
+            evaluations = _parse_evaluations_json(raw_json)
         except (
             VectorizationError,
             json.JSONDecodeError,
@@ -154,11 +188,11 @@ class MultimodalReranker:
 
         reranked: list[RerankedResult] = []
         for idx, cand in enumerate(candidates):
-            ev = eval_by_index.get(idx)
-            if ev:
-                rel_score = float(ev.get("relevance_score", 0.0))
-                is_rel = bool(ev.get("is_relevant", rel_score >= 0.5))
-                reason = str(ev.get("reasoning", "Sin explicación proporcionada."))
+            cand_eval = eval_by_index.get(idx)
+            if cand_eval:
+                rel_score = float(cand_eval.get("relevance_score", 0.0))
+                is_rel = bool(cand_eval.get("is_relevant", rel_score >= 0.5))
+                reason = str(cand_eval.get("reasoning", "Sin explicación proporcionada."))
             else:
                 rel_score = cand.score
                 is_rel = True
@@ -193,6 +227,39 @@ class MultimodalReranker:
             target_width=self._target_width,
         )
 
+    def _build_vertical_collage(self, jpeg_list: list[bytes]) -> bytes:
+        """Apila verticalmente los fotogramas distintos de un candidato en un único JPEG."""
+        distinct: list[NDArray[np.uint8]] = []
+        for raw_bytes in jpeg_list:
+            buf = np.frombuffer(raw_bytes, dtype=np.uint8)
+            decoded = cv2.imdecode(buf, cv2.IMREAD_COLOR)
+            if decoded is None:
+                continue
+            resized = resize_frame(
+                cast("NDArray[np.uint8]", decoded), self._target_width
+            )
+            if distinct and resized.shape[1] != distinct[0].shape[1]:
+                target_w = distinct[0].shape[1]
+                new_h = max(8, int(resized.shape[0] * target_w / resized.shape[1]))
+                resized = cast(
+                    "NDArray[np.uint8]",
+                    cv2.resize(resized, (target_w, new_h), interpolation=cv2.INTER_AREA),
+                )
+            if not distinct or not np.array_equal(resized, distinct[-1]):
+                distinct.append(resized)
+
+        if not distinct:
+            return jpeg_list[0]
+        if len(distinct) == 1:
+            return self._normalize_jpeg_bytes(jpeg_list[0])
+
+        collage = cast("NDArray[np.uint8]", cv2.vconcat(distinct))
+        return encode_frame_jpeg(
+            collage,
+            jpeg_quality=self._jpeg_quality,
+            target_width=0,
+        )
+
     def _collect_candidate_jpegs(
         self,
         candidates: list[SearchResult],
@@ -202,15 +269,22 @@ class MultimodalReranker:
     ) -> dict[int, list[bytes]]:
         """Obtiene los fotogramas JPEG de cada candidato desde caché o extrayéndolos del vídeo."""
         jpeg_map: dict[int, list[bytes]] = {}
+        cache_limit = max(3, frames_per_candidate)
         for idx, cand in enumerate(candidates):
             cached = load_chunk_keyframes_jpeg(
                 cand.video_name,
                 cand.chunk_index,
                 processed_dir=base_processed,
-                max_frames=frames_per_candidate,
+                max_frames=cache_limit,
             )
             if cached:
-                jpeg_map[idx] = [self._normalize_jpeg_bytes(b) for b in cached]
+                if frames_per_candidate == 1 and len(cached) > 1:
+                    jpeg_map[idx] = [self._build_vertical_collage(cached)]
+                else:
+                    jpeg_map[idx] = [
+                        self._normalize_jpeg_bytes(b)
+                        for b in cached[:frames_per_candidate]
+                    ]
                 continue
 
             vpath = base_raw / cand.video_name
@@ -244,7 +318,7 @@ class MultimodalReranker:
         config = types.GenerateContentConfig(
             response_mime_type="application/json",
             temperature=0.1,
-            max_output_tokens=600,
+            max_output_tokens=2048,
             thinking_config=types.ThinkingConfig(
                 thinking_level=types.ThinkingLevel.MINIMAL
             ),

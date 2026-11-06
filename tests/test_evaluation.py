@@ -9,13 +9,19 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.models import SearchResult, VectorizedChunk
+from src.models import RerankedResult, SearchResult, VectorizedChunk
 from src.rag_engine.evaluation import (
     GroundTruthQuery,
+    MultiTargetQuery,
     compute_benchmark_summary,
+    evaluate_multi_target_results,
+    evaluate_negative_results,
     evaluate_search_results,
     load_ground_truth,
+    load_ground_truth_csv,
     run_benchmark,
+    run_multi_target_benchmark,
+    run_negative_benchmark,
 )
 from src.rag_engine.service import VideoRAGService
 from src.rag_engine.vector_db import QdrantSearchEngine
@@ -74,6 +80,41 @@ def test_compute_benchmark_summary_calculates_recall_and_mrr() -> None:
     assert summary.mean_latency_seconds == pytest.approx(0.2)
 
 
+def test_load_ground_truth_csv_maps_dataset_columns(tmp_path: Path) -> None:
+    csv_file = tmp_path / "gt.csv"
+    csv_file.write_text(
+        "chunk_id,video_name,start_time,end_time,test_query,expected_answer\n"
+        'c0,animals.mp4,1.0,5.0,"¿Cuándo salen lémures, o monos?",respuesta\n'
+        "c1,animals.mp4,5.0,10.5,león tumbado,otra respuesta\n",
+        encoding="utf-8",
+    )
+
+    assert load_ground_truth_csv(csv_file) == [
+        GroundTruthQuery("¿Cuándo salen lémures, o monos?", "animals.mp4", 1.0, 5.0),
+        GroundTruthQuery("león tumbado", "animals.mp4", 5.0, 10.5),
+    ]
+
+
+def test_load_ground_truth_csv_filters_by_video_name() -> None:
+    from tests.e2e.harness import GROUND_TRUTH_CSV, PYTHON_VIDEO_NAME, VIDEO_NAME
+
+    all_rows = load_ground_truth_csv(GROUND_TRUTH_CSV)
+    animals_rows = load_ground_truth_csv(GROUND_TRUTH_CSV, video_name=VIDEO_NAME)
+    python_rows = load_ground_truth_csv(GROUND_TRUTH_CSV, video_name=PYTHON_VIDEO_NAME)
+
+    assert len(animals_rows) == 46
+    assert len(python_rows) == 56
+    assert len(all_rows) == 102
+    assert all(r.video_name == VIDEO_NAME for r in animals_rows)
+    assert all(r.video_name == PYTHON_VIDEO_NAME for r in python_rows)
+
+
+
+def test_load_ground_truth_csv_rejects_missing_file(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError):
+        load_ground_truth_csv(tmp_path / "missing.csv")
+
+
 def test_load_ground_truth_and_run_benchmark_persists_summary(tmp_path: Path) -> None:
     gt_file = tmp_path / "gt.json"
     gt_file.write_text(
@@ -124,4 +165,160 @@ def test_load_ground_truth_and_run_benchmark_persists_summary(tmp_path: Path) ->
     )
     assert saved["recall_at_1"] == 1.0
     assert saved["mrr"] == 1.0
+
+
+def test_evaluate_multi_target_results_counts_distinct_covered_intervals() -> None:
+    target = MultiTargetQuery(
+        query="Felinos",
+        video_name="animals.mp4",
+        expected_intervals=((5.0, 10.0), (18.0, 23.0), (35.0, 39.0), (193.0, 196.0)),
+    )
+    results = [
+        RerankedResult(
+            SearchResult(0.95, "animals.mp4", 0, 14.0, 18.0), 0.1, False, "elefantes"
+        ),
+        RerankedResult(
+            SearchResult(0.90, "animals.mp4", 1, 5.0, 8.0), 0.95, True, "león parte 1"
+        ),
+        RerankedResult(
+            SearchResult(0.88, "animals.mp4", 2, 8.0, 10.0), 0.92, True, "león parte 2"
+        ),
+        RerankedResult(
+            SearchResult(0.85, "animals.mp4", 3, 18.0, 23.0), 0.90, True, "gato gris"
+        ),
+        RerankedResult(
+            SearchResult(0.80, "animals.mp4", 4, 59.0, 64.0), 0.60, True, "falso positivo"
+        ),
+    ]
+
+    ev = evaluate_multi_target_results(target, results, latency_seconds=0.45)
+    assert ev.expected_count == 4
+    assert ev.matched_intervals == 2
+    assert ev.interval_recall == pytest.approx(2.0 / 4.0)
+    assert ev.relevant_returned == 4
+    assert ev.true_positives == 3
+    assert ev.precision == pytest.approx(3.0 / 4.0)
+    assert ev.first_hit_rank == 2
+    assert ev.latency_seconds == pytest.approx(0.45)
+
+
+def test_evaluate_negative_results_distinguishes_raw_and_reranked() -> None:
+    raw_results = [
+        SearchResult(0.65, "animals.mp4", 0, 32.0, 35.0),
+        SearchResult(0.61, "animals.mp4", 1, 212.0, 217.0),
+    ]
+    raw_ev = evaluate_negative_results("Tiburón blanco", raw_results, latency_seconds=0.1)
+    assert raw_ev.total_candidates == 2
+    assert raw_ev.false_positives == 2
+    assert raw_ev.correctly_rejected is False
+
+    reranked_rejected = [
+        RerankedResult(
+            SearchResult(0.65, "animals.mp4", 0, 32.0, 35.0), 0.0, False, "es una medusa"
+        ),
+        RerankedResult(
+            SearchResult(0.61, "animals.mp4", 1, 212.0, 217.0), 0.0, False, "otra medusa"
+        ),
+    ]
+    rejected_ev = evaluate_negative_results(
+        "Tiburón blanco", reranked_rejected, latency_seconds=0.5
+    )
+    assert rejected_ev.total_candidates == 2
+    assert rejected_ev.false_positives == 0
+    assert rejected_ev.correctly_rejected is True
+
+
+def test_run_multi_target_and_negative_benchmarks_execute_queries() -> None:
+    service = MagicMock(spec=VideoRAGService)
+    service.search = AsyncMock(
+        side_effect=[
+            [
+                RerankedResult(
+                    SearchResult(0.9, "animals.mp4", 0, 23.0, 29.0),
+                    0.9,
+                    True,
+                    "camaleón",
+                )
+            ],
+            [
+                RerankedResult(
+                    SearchResult(0.5, "animals.mp4", 1, 0.0, 1.0),
+                    0.0,
+                    False,
+                    "elefante",
+                )
+            ],
+        ]
+    )
+
+    multi_evals = asyncio.run(
+        run_multi_target_benchmark(
+            service,
+            [MultiTargetQuery("Reptiles", "animals.mp4", ((23.0, 29.0), (232.0, 241.0)))],
+            top_k=5,
+            rerank=True,
+        )
+    )
+    neg_evals = asyncio.run(
+        run_negative_benchmark(service, ["Tiburón blanco"], top_k=5, rerank=True)
+    )
+
+    assert len(multi_evals) == 1
+    assert multi_evals[0].matched_intervals == 1
+    assert len(neg_evals) == 1
+    assert neg_evals[0].correctly_rejected is True
+
+
+def test_harness_complex_reports_serialize_multi_target_and_negative_metrics(
+    tmp_path: Path,
+) -> None:
+    from tests.e2e.harness import (
+        MULTI_TARGET_QUERIES,
+        NEGATIVE_QUERIES,
+        PYTHON_MULTI_TARGET_QUERIES,
+        PYTHON_NEGATIVE_QUERIES,
+        write_multi_target_report,
+        write_negative_report,
+    )
+
+    assert len(MULTI_TARGET_QUERIES) == 10
+    assert len(NEGATIVE_QUERIES) == 8
+    assert len(PYTHON_MULTI_TARGET_QUERIES) == 10
+    assert len(PYTHON_NEGATIVE_QUERIES) == 8
+
+    target = MULTI_TARGET_QUERIES[0]
+    ev_plain = evaluate_multi_target_results(
+        target, [SearchResult(0.9, "animals.mp4", 0, 5.0, 10.0)]
+    )
+    ev_rerank = evaluate_multi_target_results(
+        target,
+        [
+            RerankedResult(
+                SearchResult(0.9, "animals.mp4", 0, 5.0, 10.0), 0.95, True, "león"
+            ),
+            RerankedResult(
+                SearchResult(0.8, "animals.mp4", 1, 18.0, 23.0), 0.90, True, "gato"
+            ),
+        ],
+    )
+    multi_csv = tmp_path / "multi.csv"
+    write_multi_target_report(multi_csv, [ev_plain], [ev_rerank])
+    assert multi_csv.is_file()
+
+    neg_plain = evaluate_negative_results(
+        "Tiburón", [SearchResult(0.6, "animals.mp4", 0, 0.0, 5.0)]
+    )
+    neg_rerank = evaluate_negative_results(
+        "Tiburón",
+        [
+            RerankedResult(
+                SearchResult(0.6, "animals.mp4", 0, 0.0, 5.0), 0.0, False, "no hay"
+            )
+        ],
+    )
+    neg_csv = tmp_path / "neg.csv"
+    write_negative_report(neg_csv, [neg_plain], [neg_rerank])
+    assert neg_csv.is_file()
+
+
 

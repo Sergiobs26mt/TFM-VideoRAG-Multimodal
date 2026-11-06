@@ -30,6 +30,42 @@ def format_timestamp(seconds: float) -> str:
     return f"{int(minutes):02d}:{secs:04.1f}"
 
 
+def _deduplicate_temporal_candidates(
+    candidates: list[SearchResult],
+    *,
+    micro_chunk_duration: float = 1.0,
+    min_scene_separation: float = 4.0,
+) -> list[SearchResult]:
+    """Fusiona micro-fragmentos redundantes de la misma escena conservando el de mayor similitud."""
+    selected: list[SearchResult] = []
+    origins: list[tuple[float, float]] = []
+    for cand in candidates:
+        cand_dur = cand.end_time - cand.start_time
+        cand_mid = (cand.start_time + cand.end_time) / 2.0
+        merged = False
+        for idx, prev in enumerate(selected):
+            if prev.video_name != cand.video_name:
+                continue
+            orig_dur, orig_mid = origins[idx]
+            if (
+                max(cand_dur, orig_dur) < micro_chunk_duration
+                and abs(cand_mid - orig_mid) < min_scene_separation
+            ):
+                selected[idx] = SearchResult(
+                    score=prev.score,
+                    video_name=prev.video_name,
+                    chunk_index=prev.chunk_index,
+                    start_time=min(prev.start_time, cand.start_time),
+                    end_time=max(prev.end_time, cand.end_time),
+                )
+                merged = True
+                break
+        if not merged:
+            selected.append(cand)
+            origins.append((cand_dur, cand_mid))
+    return selected
+
+
 class VideoRAGService:
     """Coordina el pipeline de indexación, la búsqueda multimodal y la base de datos."""
 
@@ -136,14 +172,16 @@ class VideoRAGService:
             if cfg.rerank
             else cfg.top_k
         )
+        raw_fetch_k = max(fetch_k * 3, 25)
         cache_key = query.strip()
         query_vector = self._query_cache.get(cache_key)
         if query_vector is None:
             query_vector = await self._get_vectorizer().embed_text(query)
             self._query_cache[cache_key] = query_vector
-        candidates = self.engine.search_event(
-            query_vector, limit=fetch_k, video_name=video_filter
+        raw_candidates = self.engine.search_event(
+            query_vector, limit=raw_fetch_k, video_name=video_filter
         )
+        candidates = _deduplicate_temporal_candidates(raw_candidates)[:fetch_k]
 
         final_results: list[SearchResult] | list[RerankedResult] = candidates[: cfg.top_k]
         if cfg.rerank and candidates:

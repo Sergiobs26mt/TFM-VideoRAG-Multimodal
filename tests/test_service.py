@@ -227,3 +227,63 @@ def test_service_reuses_lazy_clients_and_maintains_db() -> None:
     service.clear_database()
     assert service.get_indexed_videos() == []
 
+
+def test_service_search_deduplicates_micro_chunks_from_same_scene() -> None:
+    engine = QdrantSearchEngine(path=None)
+    engine.create_collection(vector_size=3)
+    # 5 micro-chunks de 0.4s en la escena 96-98s, más otros 2 planos largos en 14-18s y 124-130s
+    chunks = [
+        VectorizedChunk(28, 96.0, 96.4, [1.0, 0.01, 0.0]),
+        VectorizedChunk(29, 96.4, 96.8, [1.0, 0.02, 0.0]),
+        VectorizedChunk(30, 96.8, 97.2, [1.0, 0.03, 0.0]),
+        VectorizedChunk(31, 97.2, 97.6, [1.0, 0.04, 0.0]),
+        VectorizedChunk(32, 97.6, 98.0, [1.0, 0.05, 0.0]),
+        VectorizedChunk(4, 14.0, 18.0, [0.9, 0.3, 0.0]),
+        VectorizedChunk(26, 124.0, 130.0, [0.85, 0.4, 0.0]),
+    ]
+    engine.insert_chunks(chunks, video_name="animals.mp4")
+
+    fake_vectorizer = MagicMock()
+    fake_vectorizer.embed_text = AsyncMock(return_value=[1.0, 0.0, 0.0])
+
+    service = VideoRAGService(
+        engine=engine,
+        vectorizer=fake_vectorizer,
+        vector_size=3,
+    )
+
+    results = asyncio.run(
+        service.search("Manada de animales", limit=3, rerank=False)
+    )
+    returned_indices = [r.chunk_index for r in results]
+    assert 4 in returned_indices
+    assert 26 in returned_indices
+    assert results[0].start_time == pytest.approx(96.0)
+    assert results[0].end_time == pytest.approx(98.0)
+
+
+def test_service_search_preserves_distinct_short_shots_over_one_second() -> None:
+    engine = QdrantSearchEngine(path=None)
+    engine.create_collection(vector_size=3)
+    chunks = [
+        VectorizedChunk(21, 108.1, 109.03, [1.0, 0.0, 0.0]),
+        VectorizedChunk(22, 109.03, 110.2, [1.0, 0.02, 0.0]),
+    ]
+    engine.insert_chunks(chunks, video_name="python_tutorial.mp4")
+
+    fake_vectorizer = MagicMock()
+    fake_vectorizer.embed_text = AsyncMock(return_value=[1.0, 0.0, 0.0])
+
+    service = VideoRAGService(
+        engine=engine,
+        vectorizer=fake_vectorizer,
+        vector_size=3,
+    )
+
+    results = asyncio.run(
+        service.search("Plano en blanco y negro", limit=2, rerank=False)
+    )
+    assert [r.chunk_index for r in results] == [21, 22]
+
+
+

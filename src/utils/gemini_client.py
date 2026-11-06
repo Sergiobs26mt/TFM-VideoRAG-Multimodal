@@ -55,7 +55,7 @@ async def call_with_retry(
                     f"Error no recuperable de la API (código {exc.code}): {exc}"
                 ) from exc
             logger.warning("%s: error %s (intento %d)", label, exc.code, attempt + 1)
-        except OSError as exc:
+        except (OSError, httpx.HTTPError) as exc:
             last_error = exc
             logger.warning("%s: fallo de red (intento %d): %s", label, attempt + 1, exc)
 

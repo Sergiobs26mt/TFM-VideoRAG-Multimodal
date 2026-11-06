@@ -296,7 +296,133 @@ def test_rerank_disables_thinking_and_populates_cache_on_miss(
 
     call_kwargs = mock_genai_client.aio.models.generate_content.call_args.kwargs
     config = call_kwargs["config"]
+    assert config.max_output_tokens == 2048
     assert config.thinking_config is not None
     assert config.thinking_config.thinking_level == types.ThinkingLevel.MINIMAL
     assert config.thinking_config.thinking_budget is None
+
+
+def test_rerank_recovers_complete_json_objects_when_response_is_truncated(
+    mock_genai_client: MagicMock, tmp_path: Path
+) -> None:
+    reranker = MultimodalReranker(api_key="fake-key")
+    c0 = _make_candidate(0.40, 0, 0.0, 4.0)
+    c1 = _make_candidate(0.38, 1, 4.0, 8.0)
+
+    dummy_frame = np.zeros((60, 80, 3), dtype=np.uint8)
+    truncated_json = (
+        '[\n'
+        '  {"candidate_index": 0, "is_relevant": false, "relevance_score": 0.0, "reasoning": "No es un cocodrilo."},\n'
+        '  {"candidate_index": 1, "is_relevant": false, "relevance_score": 0.0, "reasoning": "Muestra un'
+    )
+    mock_response = MagicMock()
+    mock_response.text = truncated_json
+    mock_genai_client.aio.models.generate_content.return_value = mock_response
+
+    with patch(
+        "src.rag_engine.reranker.extract_interval_frames", return_value=[dummy_frame]
+    ):
+        reranked = asyncio.run(
+            reranker.rerank(
+                "Cocodrilo",
+                [c0, c1],
+                raw_dir=tmp_path / "raw",
+                processed_dir=tmp_path / "processed",
+            )
+        )
+
+    assert len(reranked) == 2
+    by_idx = {r.chunk_index: r for r in reranked}
+    assert by_idx[0].is_relevant is False
+    assert by_idx[0].reasoning == "No es un cocodrilo."
+
+
+def test_rerank_fallback_on_httpx_read_error(
+    mock_genai_client: MagicMock, tmp_path: Path
+) -> None:
+    import httpx
+
+    reranker = MultimodalReranker(
+        api_key="fake-key", max_retries=1, retry_base_delay=0.001
+    )
+    c1 = _make_candidate(0.38, 1, 10.0, 20.0)
+    dummy_frame = np.zeros((60, 80, 3), dtype=np.uint8)
+
+    with patch(
+        "src.rag_engine.reranker.extract_interval_frames", return_value=[dummy_frame]
+    ):
+        mock_genai_client.aio.models.generate_content.side_effect = httpx.ReadError(
+            "Conexión interrumpida"
+        )
+        reranked = asyncio.run(
+            reranker.rerank(
+                "test",
+                [c1],
+                raw_dir=tmp_path / "raw",
+                processed_dir=tmp_path / "processed",
+            )
+        )
+        assert len(reranked) == 1
+        assert "no disponible" in reranked[0].reasoning
+        assert mock_genai_client.aio.models.generate_content.call_count == 2
+
+
+def test_rerank_combines_distinct_cached_keyframes_into_vertical_collage(
+    mock_genai_client: MagicMock, tmp_path: Path
+) -> None:
+    import cv2
+
+    from src.processing.keyframe_cache import save_video_keyframes
+
+    processed_dir = tmp_path / "processed"
+    f0 = np.zeros((60, 80, 3), dtype=np.uint8)
+    f1 = np.full((60, 80, 3), 120, dtype=np.uint8)
+    f2 = np.full((60, 80, 3), 240, dtype=np.uint8)
+    save_video_keyframes(
+        "tutorial.mp4",
+        {7: [f0, f1, f2]},
+        processed_dir=processed_dir,
+        target_width=80,
+    )
+
+    reranker = MultimodalReranker(api_key="fake-key", target_width=80)
+    c1 = _make_candidate(0.45, 7, 33.0, 41.0, video_name="tutorial.mp4")
+
+    mock_response = MagicMock()
+    mock_response.text = json.dumps(
+        [
+            {
+                "candidate_index": 0,
+                "is_relevant": True,
+                "relevance_score": 0.95,
+                "reasoning": "Rótulo visible en el tercer panel.",
+            }
+        ]
+    )
+    mock_genai_client.aio.models.generate_content.return_value = mock_response
+
+    asyncio.run(
+        reranker.rerank(
+            "bool",
+            [c1],
+            raw_dir=tmp_path / "raw",
+            processed_dir=processed_dir,
+        )
+    )
+    sent_contents = mock_genai_client.aio.models.generate_content.call_args.kwargs[
+        "contents"
+    ]
+    image_parts = [p for p in sent_contents if isinstance(p, types.Part)]
+    assert len(image_parts) == 1
+    assert image_parts[0].inline_data is not None
+    assert image_parts[0].inline_data.data is not None
+    decoded = cv2.imdecode(
+        np.frombuffer(image_parts[0].inline_data.data, dtype=np.uint8),
+        cv2.IMREAD_COLOR,
+    )
+    assert decoded is not None
+    assert decoded.shape == (180, 80, 3)
+
+
+
 

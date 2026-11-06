@@ -1,0 +1,9 @@
+query,total_candidates,false_positives_retrieval,false_positives_rerank,correctly_rejected_rerank
+Tiburón blanco atacando en el océano,5,5,0,True
+Canguro saltando por el desierto australiano,5,5,0,True
+Serpiente cobra deslizándose por la arena,5,5,0,True
+Águila volando alto en el cielo azul,5,5,0,True
+Cocodrilo con las fauces abiertas en la orilla de un río,5,5,0,True
+Bandada de flamencos rosas en una laguna salada,5,5,0,True
+Camión de bomberos rojo con la sirena encendida por la calle,5,5,0,True
+Persona programando código en un ordenador portátil en una oficina,5,5,0,True

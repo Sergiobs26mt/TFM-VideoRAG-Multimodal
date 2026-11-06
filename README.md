@@ -6,14 +6,14 @@ Este Trabajo de Fin de Máster aborda el ciclo de vida completo para el diseño,
 El sistema resultante permitirá realizar búsquedas semánticas cruzadas (por ejemplo, localizar el instante exacto de un evento en un archivo de vídeo a partir de una consulta en lenguaje natural) sin requerir metadatos previos.
 
 ## Objetivo General
-Diseñar, implementar y validar empíricamente un sistema avanzado de recuperación de información multimedia basado en arquitecturas de vectorización multimodal, capaz de localizar eventos de interés en grandes volúmenes de datos no estructurados a partir de búsquedas semánticas en lenguaje natural[cite: 1].
+Diseñar, implementar y validar empíricamente un sistema avanzado de recuperación de información multimedia basado en arquitecturas de vectorización multimodal, capaz de localizar eventos de interés en grandes volúmenes de datos no estructurados a partir de búsquedas semánticas en lenguaje natural.
 
 ## Objetivos Específicos
-* **Analizar el estado del arte** tecnológico en el ámbito de los modelos fundacionales multimodales (generación de embeddings) y los sistemas de búsqueda semántica (RAG y bases de datos vectoriales), evaluando las alternativas óptimas para el proyecto[cite: 1].
-* **Diseñar la arquitectura técnica** y el flujo de procesamiento (pipeline) de datos, definiendo los métodos para la ingestión, fragmentación, preprocesamiento y vectorización de los archivos de vídeo, audio y texto[cite: 1].
-* **Desarrollar una Prueba de Concepto (PoC)** funcional que integre el modelo de embeddings seleccionado, mapeando los distintos tipos de datos en un espacio semántico unificado para permitir búsquedas cruzadas eficientes sin depender de metadatos previos[cite: 1].
-* **Evaluar y validar el rendimiento** del sistema mediante la ejecución de un plan de pruebas empíricas, midiendo métricas clave como la precisión en la recuperación de eventos, el coste computacional y la viabilidad técnica general de la solución[cite: 1].
-* **Documentar el ciclo de vida completo** del proyecto de ingeniería del software y datos, detallando el marco metodológico utilizado desde la definición de requisitos hasta la validación final[cite: 1].
+* **Analizar el estado del arte** tecnológico en el ámbito de los modelos fundacionales multimodales (generación de embeddings) y los sistemas de búsqueda semántica (RAG y bases de datos vectoriales), evaluando las alternativas óptimas para el proyecto.
+* **Diseñar la arquitectura técnica** y el flujo de procesamiento (pipeline) de datos, definiendo los métodos para la ingestión, fragmentación, preprocesamiento y vectorización de los archivos de vídeo, audio y texto.
+* **Desarrollar una Prueba de Concepto (PoC)** funcional que integre el modelo de embeddings seleccionado, mapeando los distintos tipos de datos en un espacio semántico unificado para permitir búsquedas cruzadas eficientes sin depender de metadatos previos.
+* **Evaluar y validar el rendimiento** del sistema mediante la ejecución de un plan de pruebas empíricas, midiendo métricas clave como la precisión en la recuperación de eventos, el coste computacional y la viabilidad técnica general de la solución.
+* **Documentar el ciclo de vida completo** del proyecto de ingeniería del software y datos, detallando el marco metodológico utilizado desde la definición de requisitos hasta la validación final.
 
 ---
 
@@ -66,7 +66,8 @@ flowchart LR
 ├── data/
 │   ├── raw/                 # Vídeos de entrada (no versionados)
 │   ├── processed/           # Caché de fotogramas clave JPEG por vídeo/chunk
-│   └── vector_db/           # Base de datos Qdrant persistente (modo local)
+│   ├── vector_db/           # Base de datos Qdrant persistente (modo local)
+│   └── video_chunks_ground_truth.csv  # Ground truth etiquetado de animals.mp4 (usado por los tests E2E)
 ├── audit/                   # Trazabilidad por ejecución (ignorado por git)
 ├── notebooks/               # Pruebas exploratorias de embeddings
 ├── src/
@@ -87,7 +88,7 @@ flowchart LR
 │   └── utils/
 │       ├── audit.py         # RunAuditor (logs, config y resultados por run)
 │       └── gemini_client.py # Cliente compartido y transporte asíncrono con reintentos
-├── tests/                   # Pruebas unitarias con pytest
+├── tests/                   # Pruebas con pytest (unitarias y E2E con la API real en tests/e2e/)
 ├── requirements.txt
 └── .cursorrules             # Reglas de código del proyecto
 ```
@@ -300,12 +301,23 @@ Consultas de prueba ("Bucles for", "Bucles while") devolvieron scores de coseno 
 ## 10. Tests y calidad de código
 
 ```bash
-python -m pytest tests -q                                        # pruebas unitarias (53 tests)
+python -m pytest tests -q                                        # pruebas unitarias (106 tests, sin API)
+python -m pytest tests/e2e -m e2e -q                             # pruebas E2E con la API real de Gemini
 python -m ruff check src tests app.py                            # linter
 python -m mypy --explicit-package-bases src tests app.py         # tipado estático
 ```
 
-Las pruebas no usan red ni la API real: el cliente de Gemini se simula y Qdrant se ejecuta en memoria o en directorios temporales. Cubren fragmentación, entropía, vectorizador (reintentos, errores, normalización), pipeline (orden, concurrencia, fail-safe), base de datos, auditoría y el bucle interactivo.
+Las pruebas unitarias no usan red ni la API real: el cliente de Gemini se simula y Qdrant se ejecuta en memoria o en directorios temporales. Cubren fragmentación, entropía, vectorizador (reintentos, errores, normalización), pipeline (orden, concurrencia, fail-safe), base de datos, auditoría y el bucle interactivo.
+
+### 10.1 Pruebas E2E con la API real
+
+Las pruebas de `tests/e2e/` llevan el marcador `e2e` y `pytest.ini` las excluye por defecto. Requieren `GEMINI_API_KEY` y `data/raw/animals.mp4`; si falta alguno, se omiten.
+
+Una sola ejecución indexa `animals.mp4` en una base Qdrant en memoria, lanza las consultas de `data/video_chunks_ground_truth.csv` sin y con reordenación multimodal, y compara los intervalos devueltos con los etiquetados (solape temporal). Una ejecución completa tarda unos 7 minutos y consume cuota de la API. Reescribe los fotogramas de `data/processed/animals.mp4`.
+
+Cada ejecución guarda `e2e_report.csv` en `audit/run_*/` con el rango del acierto de cada consulta (`hit_rank_retrieval` y `hit_rank_rerank`; vacío si falla). Las métricas agregadas quedan en `benchmark_summary.json` de la misma carpeta.
+
+> El CSV de ground truth solo valida recuperación y reordenación. La columna `expected_answer` no se usa porque la aplicación no genera respuestas.
 
 ## 11. Limitaciones conocidas y trabajo futuro
 

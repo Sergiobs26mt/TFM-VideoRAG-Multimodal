@@ -1,0 +1,365 @@
+\ProvidesPackage{config}
+
+% ----------------------------------------
+% Packages
+% ----------------------------------------
+\usepackage[spanish,es-tabla]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage[usegeometry]{typearea}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage[hidelinks, hyperfootnotes=false]{hyperref}
+\usepackage{cite}
+\usepackage{fancyhdr}
+\usepackage{colortbl}
+\usepackage[hypcap=false]{caption}
+\usepackage{subcaption}
+\captionsetup[table]{justification=centering,singlelinecheck=false}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{enumitem}
+\usepackage{tocloft}
+\usepackage{newfloat}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{setspace}
+\usepackage{tcolorbox}
+\usepackage{adjustbox}
+\usepackage{multirow}
+\usepackage{booktabs}
+\usepackage{titlesec}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{lastpage}
+\usepackage{stackengine}
+\usepackage{parskip}
+\usepackage{tocloft}
+\usepackage{etoolbox}
+\usepackage{multicol}
+
+% ----------------------------------------
+% Fonts
+% ----------------------------------------
+\usepackage{baskervillef}
+\usepackage[varqu,varl,var0]{inconsolata}
+\usepackage[scale=.90,type1]{cabin}
+\usepackage[cal=boondoxo]{mathalfa}
+
+% ----------------------------------------
+% General Document Settings
+% ----------------------------------------
+\renewcommand{\baselinestretch}{1.15}
+\geometry{left=2.2cm, right=2.2cm, top=2.5cm, bottom=3.5cm}
+\setlength{\headheight}{50pt}
+\setlength{\footskip}{24pt}
+\setlength{\parindent}{2em}
+\bibliographystyle{ieeetr}
+
+% ----------------------------------------
+% Section Title Formatting
+% ----------------------------------------
+\titleformat{\section}
+  {\fontsize{20pt}{20pt}\bfseries}
+  {\thesection}{1em}{}
+\titlespacing*{\section}{0pt}{3.5ex plus 1ex minus .2ex}{0.5ex}
+
+\titleformat{\subsection}
+  {\fontsize{15pt}{15pt}\bfseries}
+  {\thesubsection}{1em}{}
+\titlespacing*{\subsection}{0pt}{3.25ex plus 1ex minus .2ex}{0.5ex}
+
+\titleformat{\subsubsection}
+  {\fontsize{13pt}{13pt}\bfseries}
+  {\thesubsubsection}{1em}{}
+\titlespacing*{\subsubsection}{0pt}{3.25ex plus 1ex minus .2ex}{0.5ex}
+
+% ----------------------------------------
+% Level-4 & Level-5 Headings
+% ----------------------------------------
+\setcounter{secnumdepth}{5}
+\setcounter{tocdepth}{3}
+
+\newcommand{\subsubsubsection}[1]{\paragraph{#1}}
+\renewcommand{\theparagraph}{\thesubsubsection.\arabic{paragraph}}
+\renewcommand{\thesubparagraph}{\theparagraph.\arabic{subparagraph}}
+
+\titleformat{\paragraph}
+  {\fontsize{12pt}{12pt}\bfseries}
+  {\theparagraph}{1em}{}
+\titlespacing*{\paragraph}{0pt}{2.5ex plus 1ex minus .2ex}{0.5ex}
+
+\titleformat{\subparagraph}
+  {\fontsize{11pt}{11pt}\bfseries}
+  {\thesubparagraph}{1em}{}
+\titlespacing*{\subparagraph}{0pt}{2.0ex plus 1ex minus .2ex}{0.4ex}
+
+% ----------------------------------------
+% Table of Contents and Lists Formatting
+% ----------------------------------------
+\renewcommand{\cfttoctitlefont}{\fontsize{20pt}{20pt}\bfseries}
+\renewcommand{\cftloftitlefont}{\fontsize{20pt}{20pt}\bfseries}
+\renewcommand{\cftlottitlefont}{\fontsize{20pt}{20pt}\bfseries}
+
+\cftsetindents{section}{0em}{2em}
+\cftsetindents{subsection}{2.5em}{2.5em}
+\cftsetindents{subsubsection}{5em}{3em}
+
+% ----------------------------------------
+% Custom Colors
+% ----------------------------------------
+\definecolor{darkred}{RGB}{139,0,0}
+\definecolor{darkgreen}{RGB}{0,100,0}
+\definecolor{darkblue}{RGB}{0,0,139}
+\definecolor{codebackground}{RGB}{248,248,248}
+\definecolor{codekeyword}{RGB}{0,63,127}
+\definecolor{codestring}{RGB}{163,21,21}
+\definecolor{codecomment}{RGB}{0,128,0}
+\definecolor{codenumber}{RGB}{110,110,110}
+
+% ----------------------------------------
+% Document Constants
+% ----------------------------------------
+% Front Page Information
+% ----------------------------------------
+\newcommand{\epi}{ESCUELA POLITÉCNICA DE INGENIERÍA DE GIJÓN}
+\newcommand{\qualification}{MÁSTER UNIVERSITARIO EN INGENIERÍA INFORMÁTICA}
+\newcommand{\area}{ÁREA DE ARQUITECTURA Y TECNOLOGÍA DE COMPUTADORES}
+\newcommand{\tfm}{TRABAJO FIN DE MÁSTER}
+\newcommand{\mytitle}{Sistema de vectorización multimodal para la recuperación semántica de eventos en contenido audiovisual}
+\newcommand{\me}{D. Sergio Botana Suárez}
+\newcommand{\meNoD}{Sergio Botana Suárez}
+\newcommand{\tutor}{D. Rubén Usamentiaga Fernández}
+\newcommand{\cotutor}{D. Oscar Díaz Pedrayes}
+\newcommand{\authorUO}{Sergio Botana Suárez, UO288928}
+\newcommand{\email}{UO288928@uniovi.es}
+\newcommand{\mydate}{FECHA: noviembre 2026}
+\newcommand{\imagen}{img/UniOvi_bn.jpg}
+% ----------------------------------------
+% Document References
+% ----------------------------------------
+\newcommand{\pytorch}{\textit{PyTorch}}
+\newcommand{\python}{\textit{Python}}
+\newcommand{\pyenv}{\textit{pyenv}}
+
+% ----------------------------------------
+% Title Page Command
+% ----------------------------------------
+\newcommand{\frontpage}{
+\begin{titlepage}
+    \centering
+	\begin{table}[h]
+		\centering
+		\begin{tabular}{m{10cm} m{1cm} m{3cm}}
+			\includegraphics[width=86mm]{img/logo_uniovi.jpg} & & \vspace{1.52mm} \includegraphics[width=23mm]{img/logo_epi.png}  \\
+		\end{tabular}
+	\end{table}
+
+	\vspace{2\baselineskip}    
+	{\fontsize{18pt}{18pt}\selectfont \textbf{\epi}} \\
+	\vspace{3\baselineskip}
+	{\fontsize{16pt}{16pt}\selectfont \textbf{\qualification}} \\
+	\vspace{3\baselineskip}
+	\begin{minipage}{0.6\textwidth}
+		\centering
+		{\fontsize{15pt}{18pt}\selectfont \textbf{\area}}
+	\end{minipage} \\
+	\vspace{3\baselineskip}
+	{\fontsize{15pt}{14pt}\selectfont \textbf{\tfm}} \\
+	\vspace{2.5\baselineskip}
+	\begin{minipage}{0.82\textwidth}
+		\centering
+		{\fontsize{18pt}{22pt}\selectfont \textbf{\textit{\mytitle}}} 
+	\end{minipage} \\
+	\vspace{3\baselineskip}
+	{\fontsize{16pt}{16pt} \textbf{\textit{\me}}} \\
+	\vspace{0.75\baselineskip}
+	{\fontsize{14pt}{14pt} \textbf{TUTOR: \fontsize{16pt}{16pt} \textit{\tutor}}} \\
+	\vspace{0.75\baselineskip}
+	{\fontsize{14pt}{14pt} \textbf{COTUTOR: \fontsize{16pt}{16pt} \textit{\cotutor}}} \\
+	\vspace{2\baselineskip}
+	{\fontsize{14pt}{14pt} {\textbf{\mydate}}}
+\end{titlepage}}
+
+\newcommand{\originalitydeclaration}{
+\begin{titlepage}
+    \thispagestyle{empty}
+    \centering
+	\begin{table}[h]
+		\centering
+		\begin{tabular}{m{10cm} m{1cm} m{3cm}}
+			\includegraphics[width=86mm]{img/logo_uniovi.jpg} & & \vspace{1.52mm} \includegraphics[width=23mm]{img/logo_epi.png}  \\
+		\end{tabular}
+	\end{table}
+
+	\vspace{4\baselineskip}
+	{\fontsize{16pt}{16pt}\selectfont \textbf{DECLARACIÓN DE ORIGINALIDAD}} \\
+	\vspace{3\baselineskip}
+
+	\begin{minipage}{0.8\textwidth}
+	\setlength{\parindent}{2em}
+	D. Sergio Botana Suárez con DNI 53783252Y como alumno del Máster
+	Universitario en Ingeniería Informática de la Universidad de Oviedo,
+	DECLARO que el Trabajo Fin de Máster titulado
+	
+	\noindent\textit{\mytitle}	
+	es de mi autoría, es original y las fuentes 
+	bibliográficas utilizadas han sido debidamente citadas.
+	\end{minipage}
+	
+	\vspace{3\baselineskip}
+	{\small En Gijón, a 31 de noviembre de 2026}
+
+	\begin{minipage}{0.84\textwidth}
+		\centering
+		\vspace{4\baselineskip}
+
+		Firmado: \meNoD
+	\end{minipage}
+\end{titlepage}}
+
+\newcommand{\intentionallyblankpage}{
+\clearpage
+\thispagestyle{no-rightmark}
+\vspace*{\fill}
+\begin{center}
+\textit{Página intencionadamente en blanco}
+\end{center}
+\vspace*{\fill}
+\clearpage
+}
+
+\renewcommand{\sectionmark}[1]{\markright{\thesection\ #1}}
+\renewcommand{\subsectionmark}[1]{}
+
+% ----------------------------------------
+% Header and Footer Configuration
+% ----------------------------------------
+\fancyhf{}
+\fancyhead[L]{\includegraphics[height=16mm]{img/logo_epi.png}
+  \hspace{1em} \Longstack[l]{
+    \textbf{UNIVERSIDAD DE OVIEDO} \newline
+    \textbf{Escuela Politécnica de Ingeniería de Gijón}}}
+\fancyhead[R]{\textit{\rightmark}}
+\fancyfoot[L]{\meNoD}
+\fancyfoot[R]{{Hoja \thepage \hspace{1pt} de \pageref{LastPage}}}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.4pt}
+\setlength{\headsep}{20pt}
+
+\fancypagestyle{plain}{
+  \fancyhf{}
+  \fancyhead[L]{\includegraphics[height=16mm]{img/logo_epi.png}
+    \hspace{1em} \Longstack[l]{
+      \textbf{UNIVERSIDAD DE OVIEDO} \newline
+      \textbf{Escuela Politécnica de Ingeniería de Gijón}}}
+  \fancyhead[R]{\textit{\rightmark}}
+  \fancyfoot[L]{\meNoD}
+  \fancyfoot[R]{{Hoja \thepage \hspace{1pt} de \pageref{LastPage}}}
+  \renewcommand{\headrulewidth}{0.4pt}
+  \renewcommand{\footrulewidth}{0.4pt}
+  \setlength{\headsep}{20pt}
+}
+
+\fancypagestyle{no-rightmark}{
+  \fancyhf{}
+  \fancyhead[L]{\includegraphics[height=16mm]{img/logo_epi.png}
+    \hspace{1em} \Longstack[l]{
+      \textbf{UNIVERSIDAD DE OVIEDO} \newline
+      \textbf{Escuela Politécnica de Ingeniería de Gijón}}}
+  \fancyfoot[L]{\meNoD}
+  \fancyfoot[R]{{Hoja \thepage \hspace{1pt} de \pageref{LastPage}}}
+  \renewcommand{\headrulewidth}{0.4pt}
+  \renewcommand{\footrulewidth}{0.4pt}
+  \setlength{\headsep}{20pt}
+}
+
+\pagestyle{fancy}
+
+% ----------------------------------------
+% TikZ Styles
+% ----------------------------------------
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows}
+\usetikzlibrary{positioning}
+\usetikzlibrary{decorations.pathreplacing}
+
+\tikzstyle{startstop} = [circle, rounded corners, minimum width=1cm, minimum height=1cm, text centered, draw=black, fill=black]
+\tikzstyle{process} = [rectangle, minimum width=3cm, minimum height=1cm, text width=3cm, text centered, draw=black, fill=blue!20]
+\tikzstyle{decision} = [diamond, minimum width=3cm, minimum height=1cm, text width=3cm, text centered, draw=black, fill=green!30]
+\tikzstyle{stack} = [rectangle, minimum width=3cm, minimum height=6cm, text width=3cm, text centered, draw=black]
+\tikzstyle{dot} = [circle, minimum width=1px, minimum height=1px, text width=20px, text centered, draw=black, fill=white]
+\tikzstyle{arrow} = [thick, ->, >=stealth]
+\tikzstyle{dorrow} = [thick, dotted, ->, >=stealth]
+\tikzstyle{darrow} = [thick, <->, >=stealth]
+
+% ----------------------------------------
+% Listings Configuration
+% ----------------------------------------
+\AtBeginDocument{
+  \renewcommand{\lstlistingname}{Fragmento}
+  \renewcommand{\lstlistlistingname}{Índice de fragmentos}
+}
+
+\lstdefinelanguage{Dockerfile}{
+  morekeywords={[1]FROM, RUN, CMD, LABEL, MAINTAINER, EXPOSE, ENV, ADD, COPY, ENTRYPOINT, VOLUME, USER, WORKDIR, ARG, ONBUILD, STOPSIGNAL, HEALTHCHECK, SHELL},
+  keywordstyle=[1]\color{blue}\bfseries,
+  morecomment=[l]{\#},
+  commentstyle=\color{gray}\itshape,
+  morestring=[b]",
+  stringstyle=\color{red}
+}
+
+\lstdefinestyle{pythonstyle}{
+    language=Python,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{codekeyword}\bfseries,
+    commentstyle=\itshape\color{codecomment},
+    stringstyle=\color{codestring},
+    numberstyle=\tiny\color{codenumber},
+    backgroundcolor=\color{codebackground},
+    numbers=left,
+    stepnumber=1,
+    frame=single,
+    framerule=0.4pt,
+    rulecolor=\color{black!45},
+    captionpos=b,
+    breaklines=true,
+    breakatwhitespace=false,
+    tabsize=4,
+    keepspaces=true,
+    showstringspaces=false,
+    columns=fullflexible,
+    upquote=true,
+    aboveskip=1em,
+    belowskip=1em,
+    framexleftmargin=1.5em,
+    xleftmargin=0.075\textwidth,
+    xrightmargin=0.05\textwidth,
+    morekeywords={self,None,True,False},
+}
+
+\lstset{
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{black}\bfseries,
+    commentstyle=\itshape\color{gray},
+    stringstyle=\color{red},
+    backgroundcolor=\color{codebackground},
+    numbers=left,
+    numberstyle=\tiny,
+    stepnumber=1,
+    frame=single,
+    captionpos=b,
+    rulecolor=\color{black},
+    breaklines=true,
+    tabsize=2,
+    keepspaces=true,
+    showstringspaces=false,
+    columns=fullflexible,
+    aboveskip=1em,
+    belowskip=1em,
+    framexleftmargin=1.5em,
+    xleftmargin=0.075\textwidth,
+    xrightmargin=0.05\textwidth
+}
+
+\endinput
