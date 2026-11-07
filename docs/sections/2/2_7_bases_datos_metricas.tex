@@ -24,20 +24,19 @@ La Figura~\ref{fig:qdrant_hnsw_payload} ilustra la arquitectura de almacenamient
 \begin{figure}[htbp]
 \centering
 \begin{tikzpicture}[
-    node distance=0.5cm and 0.7cm,
-    pointbox/.style={rectangle, draw=blue!80!black, fill=blue!8, thick, minimum width=3.4cm, minimum height=1.25cm, align=center, font=\scriptsize, rounded corners=2pt},
-    hnswbox/.style={rectangle, draw=purple!80!black, fill=purple!8, thick, minimum width=3.6cm, minimum height=1.25cm, align=center, font=\scriptsize, rounded corners=2pt},
-    payloadbox/.style={rectangle, draw=teal!80!black, fill=teal!8, thick, minimum width=3.6cm, minimum height=1.25cm, align=center, font=\scriptsize, rounded corners=2pt},
-    outbox/.style={rectangle, draw=green!60!black, fill=green!12, very thick, minimum width=3.5cm, minimum height=1.1cm, align=center, font=\scriptsize\bfseries, rounded corners=2pt},
+    pointbox/.style={rectangle, draw=blue!80!black, fill=blue!8, thick, minimum width=3.5cm, minimum height=1.3cm, align=center, font=\scriptsize, rounded corners=2pt},
+    hnswbox/.style={rectangle, draw=purple!80!black, fill=purple!8, thick, minimum width=3.8cm, minimum height=1.3cm, align=center, font=\scriptsize, rounded corners=2pt},
+    payloadbox/.style={rectangle, draw=teal!80!black, fill=teal!8, thick, minimum width=3.8cm, minimum height=1.3cm, align=center, font=\scriptsize, rounded corners=2pt},
+    outbox/.style={rectangle, draw=green!60!black, fill=green!12, very thick, minimum width=3.7cm, minimum height=1.3cm, align=center, font=\scriptsize\bfseries, rounded corners=2pt},
     arrow/.style={-stealth, thick, draw=black!80}
 ]
-\node[pointbox] (point) at (-5.4, 0) {Estructura \texttt{PointStruct}\\UUIDv5 Determinista\\(Vídeo + Índice Chunk)};
+\node[pointbox] (point) at (-5.6, 0) {Estructura \texttt{PointStruct}\\UUIDv5 Determinista\\(Vídeo + Índice Chunk)};
 
-\node[hnswbox] (hnsw) at (-1.5, 0.9) {Índice HNSW\\(Grafo de Alta Dimensión)\\Búsqueda por Coseno $\cos(\theta)$};
+\node[hnswbox] (hnsw) at (0, 1.3) {Índice HNSW\\(Grafo de Alta Dimensión)\\Búsqueda por Coseno $\cos(\theta)$};
 
-\node[payloadbox] (payload) at (-1.5, -0.9) {\textit{Payload} de Metadatos\\(\texttt{video\_name}, \texttt{chunk\_index},\\ \texttt{start\_time}, \texttt{end\_time})};
+\node[payloadbox] (payload) at (0, -1.3) {\textit{Payload} de Metadatos\\(\texttt{video\_name}, \texttt{chunk\_index},\\ \texttt{start\_time}, \texttt{end\_time})};
 
-\node[outbox] (query) at (3.0, 0) {Consulta Vectorial Top-$K$\\(\texttt{query\_points})\\Devuelve Intervalos Temporales};
+\node[outbox] (query) at (5.6, 0) {Consulta Vectorial Top-$K$\\(\texttt{query\_points})\\Devuelve Intervalos Temporales};
 
 \draw[arrow, blue!80!black] (point.north east) -- (hnsw.west);
 \draw[arrow, blue!80!black] (point.south east) -- (payload.west);
@@ -51,9 +50,9 @@ La Figura~\ref{fig:qdrant_hnsw_payload} ilustra la arquitectura de almacenamient
 \subsubsection{Métricas Clásicas de Recuperación y Bancos de Pruebas Masivos (MMEB-V2 y MVEB)}
 \label{subsubsec:metricas_clasicas_benchmarks}
 
-La validación empírica del rendimiento de los sistemas de recuperación de información multimedia se apoya en una combinación de métricas estadísticas clásicas y bancos de pruebas (*benchmarks*) estandarizados a escala masiva \cite{qwen3_vl_emb2026, eval_mrag2025}. %[cite: 2, 4]
+La validación empírica del rendimiento de los sistemas de recuperación de información multimedia se apoya en una combinación de métricas estadísticas clásicas y bancos de pruebas (\textit{benchmarks}) estandarizados a escala masiva \cite{qwen3_vl_emb2026, eval_mrag2025}. %[cite: 2, 4]
 
-En primer lugar, las métricas clásicas de Recuperación de Información evalúan la precisión del ordenamiento top-$K$ devuelto por la base de datos vectorial frente a la verdad terreno (*ground truth*) \cite{qwen3_vl_emb2026}: %[cite: 2, 4]
+En primer lugar, las métricas clásicas de Recuperación de Información evalúan la precisión del ordenamiento top-$K$ devuelto por la base de datos vectorial frente a la verdad terreno (\textit{ground truth}) \cite{qwen3_vl_emb2026}: %[cite: 2, 4]
 \begin{itemize}
     \item \textbf{\textit{Recall@K}:} Mide la proporción de fragmentos relevantes reales que han sido recuperados dentro de los primeros $K$ resultados devueltos \cite{qwen3_vl_emb2026}. %[cite: 2, 4]
     \item \textbf{\textit{Precision@K}:} Cuantifica qué porcentaje de los $K$ resultados devueltos por el sistema son efectivamente relevantes \cite{qwen3_vl_emb2026}. %[cite: 4]
@@ -73,7 +72,7 @@ A nivel global, la comunidad investigadora evalúa los modelos sobre dos bancos 
 La evaluación de arquitecturas RAG multimodales exige ir más allá de la simple recuperación de vectores, analizando la calidad de la generación de respuestas y la veracidad de la atribución temporal \cite{eval_mrag2025, video_rac2025}. %[cite: 2, 4]
 El marco de referencia contemporáneo se estructura en torno a dos metodologías complementarias \cite{eval_mrag2025, video_rac2025}: %[cite: 2, 4]
 
-\paragraph{1. Framework RAGAS (\textit{Retrieval Augmented Generation Assessment}):}
+\paragraph{Framework RAGAS (\textit{Retrieval Augmented Generation Assessment}):}
 Descompone la calidad de la respuesta generada por el modelo de lenguaje en tres dimensiones fundamentales independientes \cite{video_rac2025}: %[cite: 2, 4]
 \begin{itemize}
     \item \textbf{\textit{Answer Relevance}:} Mide el grado de pertinencia y coherencia de la respuesta generada respecto a la consulta original del usuario \cite{video_rac2025}. %[cite: 2, 4]
@@ -81,7 +80,7 @@ Descompone la calidad de la respuesta generada por el modelo de lenguaje en tres
     \item \textbf{\textit{Faithfulness} (Fidelidad):} Cuantifica si la respuesta generada se deriva estrictamente del contexto recuperado, detectando y penalizando cualquier alucinación o invención por parte del modelo \cite{video_rac2025}. %[cite: 2, 4]
 \end{itemize}
 
-\paragraph{2. Métricas de Atribución Verificable (ALCE, ARGUE, MIRAGE):}
+\paragraph{Métricas de Atribución Verificable (ALCE, ARGUE, MIRAGE):}
 Marcos como \textbf{ALCE} (\textit{Automatic LLM Citation Evaluation}), \textbf{ARGUE} y \textbf{MIRAGE} extienden la evaluación para auditar si cada afirmación generada en la respuesta cuenta con un enlace de citación directo y verificable hacia el intervalo temporal exacto ($[t_{\text{inicio}}, t_{\text{fin}}]$) del vídeo fuente, garantizando una trazabilidad forense inalterable \cite{eval_mrag2025}. %[cite: 2, 4]
 
 La Figura~\ref{fig:frameworks_ragas_alce} resume la estructura jerárquica de evaluación mediante RAGAS y métricas de atribución verificable. %[cite: 2, 4]
@@ -89,30 +88,40 @@ La Figura~\ref{fig:frameworks_ragas_alce} resume la estructura jerárquica de ev
 \begin{figure}[htbp]
 \centering
 \begin{tikzpicture}[
-    node distance=0.45cm and 0.6cm,
-    boxroot/.style={rectangle, draw=black!85, fill=gray!12, very thick, minimum width=12.8cm, minimum height=0.85cm, align=center, font=\scriptsize\bfseries, rounded corners=2pt},
-    boxcol1/.style={rectangle, draw=blue!80!black, fill=blue!8, thick, minimum width=6.0cm, minimum height=1.3cm, align=center, font=\scriptsize, rounded corners=2pt},
-    boxcol2/.style={rectangle, draw=purple!80!black, fill=purple!8, thick, minimum width=6.0cm, minimum height=1.3cm, align=center, font=\scriptsize, rounded corners=2pt},
-    arrow/.style={-stealth, thick, draw=black!80}
+    boxroot/.style={rectangle, draw=black!75, fill=gray!10, thick, minimum width=15.0cm, minimum height=0.85cm, align=center, font=\small\bfseries, rounded corners=3pt},
+    boxcol1/.style={rectangle, draw=blue!80!black, fill=blue!6, thick, minimum width=7.25cm, minimum height=2.2cm, align=center, rounded corners=3pt},
+    boxcol2/.style={rectangle, draw=purple!80!black, fill=purple!6, thick, minimum width=7.25cm, minimum height=2.2cm, align=center, rounded corners=3pt},
+    boxout/.style={rectangle, draw=green!60!black, fill=green!10, thick, minimum width=15.0cm, minimum height=0.85cm, align=center, font=\small\bfseries, rounded corners=3pt},
+    arrow/.style={-stealth, thick}
 ]
-\node[boxroot] (root) at (0, 2.3) {Evaluación Integral de Arquitecturas RAG Multimodales de Vídeo};
+\node[boxroot] (root) at (0, 3.2) {Evaluación Integral de Arquitecturas RAG Multimodales de Vídeo};
 
-\node[boxcol1] (rgs) at (-3.3, 0.9) {\textbf{Framework RAGAS}\\
-$\bullet$ \textit{Answer Relevance} (Pertinencia)\\
-$\bullet$ \textit{Context Relevance} (Precisión recuperación)\\
-$\bullet$ \textit{Faithfulness} (Ausencia de alucinaciones)};
+\node[boxcol1] (rgs) at (-3.875, 1.1) {%
+    {\bfseries\small Framework RAGAS}\\[6pt]
+    \scriptsize
+    \begin{tabular}{@{\textbullet~}p{6.4cm}@{}}
+    \textit{Answer Relevance} (Pertinencia de la respuesta)\\[3pt]
+    \textit{Context Relevance} (Precisión en recuperación vectorial)\\[3pt]
+    \textit{Faithfulness} (Fidelidad y ausencia de alucinaciones)
+    \end{tabular}
+};
 
-\node[boxcol2] (alc) at (3.3, 0.9) {\textbf{Atribución Verificable (ALCE / MIRAGE)}\\
-$\bullet$ Citas a nivel de sub-afirmación\\
-$\bullet$ Enlace directo a marcas de tiempo $[t_{\text{ini}}, t_{\text{fin}}]$\\
-$\bullet$ Trazabilidad forense auditable};
+\node[boxcol2] (alc) at (3.875, 1.1) {%
+    {\bfseries\small Atribución Verificable (ALCE / MIRAGE)}\\[6pt]
+    \scriptsize
+    \begin{tabular}{@{\textbullet~}p{6.4cm}@{}}
+    Citas a nivel de sub-afirmación puntual\\[3pt]
+    Enlace directo a marcas de tiempo $[t_{\text{ini}}, t_{\text{fin}}]$\\[3pt]
+    Trazabilidad forense y auditoría reproducible
+    \end{tabular}
+};
 
-\node[rectangle, draw=green!60!black, fill=green!12, very thick, minimum width=12.8cm, minimum height=0.75cm, align=center, font=\scriptsize\bfseries, rounded corners=2pt] (out) at (0, -0.45) {Validación Empírica Definitiva del Sistema TFM (Precisión, Coste Computacional y Fiabilidad)};
+\node[boxout] (out) at (0, -1.0) {Validación Empírica Definitiva del Sistema TFM (Precisión, Coste Computacional y Fiabilidad)};
 
-\draw[arrow] (root.south) -- (-3.3, 1.6);
-\draw[arrow] (root.south) -- (3.3, 1.6);
-\draw[arrow] (-3.3, 0.2) -- (out.west |- -3.3, -0.05);
-\draw[arrow] (3.3, 0.2) -- (out.east |- 3.3, -0.05);
+\draw[arrow, blue!80!black] (root.south -| rgs.north) -- (rgs.north);
+\draw[arrow, purple!80!black] (root.south -| alc.north) -- (alc.north);
+\draw[arrow, green!50!black] (rgs.south) -- (out.north -| rgs.south);
+\draw[arrow, green!50!black] (alc.south) -- (out.north -| alc.south);
 \end{tikzpicture}
 \caption{Estructura combinada de evaluación empírica mediante el framework RAGAS y métricas de atribución verificable (ALCE/MIRAGE) para validar el rendimiento del sistema RAG de vídeo \cite{eval_mrag2025, video_rac2025}.} %[cite: 2, 4]
 \label{fig:frameworks_ragas_alce}
@@ -121,13 +130,13 @@ $\bullet$ Trazabilidad forense auditable};
 \subsubsection{Metodología de Revisión Sistemática de la Literatura Asistida por NotebookLM}
 \label{subsubsec:metodologia_revision_notebooklm}
 
-Para llevar a cabo la recopilación, filtrado y síntesis crítica de las fuentes bibliográficas empleadas a lo largo de este estado del arte, la investigación ha adoptado un marco metodológico estructurado en un **flujo de trabajo de cuatro etapas asistido por entornos RAG acotados y gestores bibliográficos** (tales como Zotero sincronizado con repositorios abiertos en arXiv) \cite{easton2026notebooklm, sourclip2026notebooklm}: %[cite: 2, 4]
+Para llevar a cabo la recopilación, filtrado y síntesis crítica de las fuentes bibliográficas empleadas a lo largo de este estado del arte, la investigación ha adoptado un marco metodológico estructurado en un \textbf{flujo de trabajo de cuatro etapas asistido por entornos RAG acotados y gestores bibliográficos} (tales como Zotero sincronizado con repositorios abiertos en arXiv) \cite{easton2026notebooklm, sourclip2026notebooklm}: %[cite: 2, 4]
 
 \begin{enumerate}
-    \item \textbf{Etapa 1 — Construcción y Depuración de la Base de Conocimiento Acotada:} Recopilación sistemática de artículos preprints y documentación técnica cumpliendo restricciones operativas (tales como los límites de ingestión de 50 fuentes por cuaderno y 500.000 palabras por documento en herramientas como Google NotebookLM), resolviéndolo mediante la fusión temática de artículos o el uso de múltiples cuadernos especializados \cite{easton2026notebooklm}. %[cite: 2, 4]
-    \item \textbf{Etapa 2 — Síntesis Estructural y Descubrimiento Topológico:} Análisis automatizado de convergencia tecnológica mediante resúmenes fonéticos integrados (*Audio Overview*) y generación de cronologías de evolución arquitectónica \cite{easton2026notebooklm, sourclip2026notebooklm}. %[cite: 2, 4]
-    \item \textbf{Etapa 3 — Análisis Crítico, Deconstrucción Metodológica y Lazo de Relleno de Brechas (\textit{Gap-Fill Loop}):} Contraste sistemático de hipótesis metodológicas y detección de vacíos en la literatura previa sobre fragmentación adaptativa y modelos multimodales \cite{easton2026notebooklm}. %[cite: 2, 4]
-    \item \textbf{Etapa 4 — Verificación Transparente y Consolidación Causal:} Auditoría inalienable de las citas generadas contrastándolas directamente sobre los textos fuente originales para garantizar la ausencia de alucinaciones teóricas en la memoria del TFM \cite{easton2026notebooklm, sourclip2026notebooklm}. %[cite: 2, 4]
+    \item \textbf{Etapa 1 - Construcción y Depuración de la Base de Conocimiento Acotada:} Recopilación sistemática de artículos preprints y documentación técnica cumpliendo restricciones operativas (tales como los límites de ingestión de 50 fuentes por cuaderno y 500.000 palabras por documento en herramientas como Google NotebookLM), resolviéndolo mediante la fusión temática de artículos o el uso de múltiples cuadernos especializados \cite{easton2026notebooklm}. %[cite: 2, 4]
+    \item \textbf{Etapa 2 - Síntesis Estructural y Descubrimiento Topológico:} Análisis automatizado de convergencia tecnológica mediante resúmenes fonéticos integrados (\textit{Audio Overview}) y generación de cronologías de evolución arquitectónica \cite{easton2026notebooklm, sourclip2026notebooklm}. %[cite: 2, 4]
+    \item \textbf{Etapa 3 - Análisis Crítico, Deconstrucción Metodológica y Lazo de Relleno de Brechas (\textit{Gap-Fill Loop}):} Contraste sistemático de hipótesis metodológicas y detección de vacíos en la literatura previa sobre fragmentación adaptativa y modelos multimodales \cite{easton2026notebooklm}. %[cite: 2, 4]
+    \item \textbf{Etapa 4 - Verificación Transparente y Consolidación Causal:} Auditoría inalienable de las citas generadas contrastándolas directamente sobre los textos fuente originales para garantizar la ausencia de alucinaciones teóricas en la memoria del TFM \cite{easton2026notebooklm, sourclip2026notebooklm}. %[cite: 2, 4]
 \end{enumerate}
 
 La Figura~\ref{fig:flujo_cuatro_etapas_literatura} esquematiza este flujo metodológico de investigación sistemática. %[cite: 2, 4]
@@ -135,14 +144,14 @@ La Figura~\ref{fig:flujo_cuatro_etapas_literatura} esquematiza este flujo metodo
 \begin{figure}[htbp]
 \centering
 \begin{tikzpicture}[
-    node distance=0.45cm and 0.5cm,
-    stepbox/.style={rectangle, draw=black!80, fill=gray!10, thick, text width=2.6cm, minimum height=1.3cm, align=center, font=\scriptsize, rounded corners=2pt},
-    arrow/.style={-stealth, thick, draw=black!80}
+    stepbox/.style={rectangle, draw=black!75, fill=gray!8, thick, text width=3.0cm, minimum height=2.1cm, align=center, font=\scriptsize, rounded corners=3pt},
+    outbox/.style={rectangle, draw=green!60!black, fill=green!10, very thick, text width=3.0cm, minimum height=2.1cm, align=center, font=\scriptsize, rounded corners=3pt},
+    arrow/.style={-stealth, thick, draw=black!75}
 ]
-\node[stepbox] (s1) at (-4.5, 0) {\textbf{Etapa 1}\\Recopilación Zotero\\+ arXiv / NotebookLM\\(Base acotada 50 fuentes)};
-\node[stepbox] (s2) at (-1.5, 0) {\textbf{Etapa 2}\\Síntesis y Cronologías\\(\textit{Audio Overview}\\y Topología)};
-\node[stepbox] (s3) at (1.5, 0) {\textbf{Etapa 3}\\Análisis Crítico\\+\textit{Gap-Fill Loop}\\(Deconstrucción)};
-\node[stepbox, draw=green!60!black, fill=green!12, very thick] (s4) at (4.5, 0) {\textbf{Etapa 4}\\Verificación Causal\\y Auditoría de Citas\\(Fuentes Originales)};
+\node[stepbox] (s1) at (-5.7, 0) {\textbf{Etapa 1: Ingestión}\\[3pt]Recopilación Zotero\\[1pt]+ arXiv / NotebookLM\\[3pt]{\normalfont\tiny (Base: 50 fuentes)}};
+\node[stepbox] (s2) at (-1.9, 0) {\textbf{Etapa 2: Síntesis}\\[3pt]Síntesis Estructural\\[1pt]y Cronologías\\[3pt]{\normalfont\tiny (\textit{Audio Overview})}};
+\node[stepbox] (s3) at (1.9, 0) {\textbf{Etapa 3: Crítica}\\[3pt]Análisis Crítico y\\[1pt]\textit{Gap-Fill Loop}\\[3pt]{\normalfont\tiny (Deconstrucción)}};
+\node[outbox] (s4) at (5.7, 0) {\textbf{Etapa 4: Citas}\\[3pt]Verificación Causal\\[1pt]y Auditoría de Citas\\[3pt]{\normalfont\tiny (Fuentes Originales)}};
 
 \draw[arrow] (s1) -- (s2);
 \draw[arrow] (s2) -- (s3);
@@ -156,17 +165,19 @@ El Cuadro~\ref{tab:resumen_metodologia_evaluacion} consolida las métricas, fram
 
 \begin{table}[htbp]
 \centering
+\small
+\setlength{\tabcolsep}{4.5pt}
 \caption{Síntesis de métricas, bancos de pruebas y metodologías de evaluación en sistemas Video RAG \cite{qwen3_vl_emb2026, eval_mrag2025, video_rac2025, easton2026notebooklm}.} %[cite: 2, 4]
 \label{tab:resumen_metodologia_evaluacion}
-\begin{tabular}{llll}
-\hline
-\textbf{Categoría de Evaluación} & \textbf{Herramienta / Framework} & \textbf{Métricas Principales} & \textbf{Objetivo en el TFM} \\
-\hline
+\begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}p{3.4cm} >{\raggedright\arraybackslash}p{3.2cm} >{\raggedright\arraybackslash}p{3.8cm} >{\raggedright\arraybackslash}X}
+\toprule
+\textbf{Categoría} & \textbf{Framework} & \textbf{Métricas} & \textbf{Objetivo en el TFM} \\
+\midrule
 Recuperación Vectorial & Qdrant + HNSW & \textit{Recall@K}, \textit{Hit@1}, \textit{nDCG@5} & Eficacia en la localización top-$K$ \\
-Benchmarks Masivos & MMEB-V2 / MVEB & Recuperación multicanal (Vid+Aud) & Comparativa con estándares 2026 \\
+Benchmarks Masivos & MMEB-V2 / MVEB & Recuperación multicanal & Comparativa con estándares 2026 \\
 Calidad RAG y Fidelidad & Framework RAGAS & \textit{Answer/Context Rel.}, \textit{Faithfulness} & Evaluación de alucinaciones y contexto \\
-Atribución Verificable & ALCE / ARGUE / MIRAGE & Citas a nivel de sub-afirmación & Trazabilidad temporal en milisegundos \\
-Revisión Bibliográfica & Zotero + NotebookLM & Flujo de 4 etapas + \textit{Gap-Fill Loop} & Rigor metodológico y estado del arte \\
-\hline
-\end{tabular}
+Atribución Verificable & ALCE / MIRAGE & Citas a nivel de afirmación & Trazabilidad temporal en milisegundos \\
+Revisión Bibliográfica & Zotero + NotebookLM & Flujo 4 etapas + \textit{Gap-Fill} & Rigor metodológico y estado del arte \\
+\bottomrule
+\end{tabularx}
 \end{table}

@@ -9,11 +9,11 @@
 \subsubsection{El Problema del Análisis Secuencial y la Representación de Datos No Estructurados}
 \label{subsubsec:problema_analisis_secuencial}
 
-El crecimiento sostenido de los repositorios multimedia en entornos académicos, industriales y de radiodifusión ha puesto de manifiesto un problema metodológico fundamental en la ingeniería de datos: la extrema ineficiencia del análisis secuencial humano frente a volúmenes masivos de información no estructurada \cite{prajwal2025multimodal}. Históricamente, la tarea de localizar un evento singular dentro de un archivo de vídeo de larga duración —disciplina denominada en la literatura científica como \textit{Long-form Video Understanding} o \textit{Video RAG}— exigía bien un visionado manual exhaustivo por parte de operadores humanos, o bien una dependencia absoluta de metadatos descriptivos y etiquetas manuales generadas previamente a la indexación \cite{multi_rag2025}. En escenarios reales que abarcan desde archivos históricos de televisión y auditorías de videovigilancia hasta repositorios de clases universitarias grabadas o historiales médicos complejos, el etiquetado manual resulta técnica y económicamente inviable.
+El crecimiento sostenido de los repositorios multimedia en entornos académicos, industriales y de radiodifusión ha puesto de manifiesto un problema metodológico fundamental en la ingeniería de datos: la extrema ineficiencia del análisis secuencial humano frente a volúmenes masivos de información no estructurada \cite{prajwal2025multimodal}. Históricamente, la tarea de localizar un evento singular dentro de un archivo de vídeo de larga duración (disciplina denominada en la literatura científica como \textit{Long-form Video Understanding} o \textit{Video RAG}) exigía bien un visionado manual exhaustivo por parte de operadores humanos, o bien una dependencia absoluta de metadatos descriptivos y etiquetas manuales generadas previamente a la indexación \cite{multi_rag2025}. En escenarios reales que abarcan desde archivos históricos de televisión y auditorías de videovigilancia hasta repositorios de clases universitarias grabadas o historiales médicos complejos, el etiquetado manual resulta técnica y económicamente inviable.
 
 Para superar la barrera del procesamiento manual, los sistemas de Recuperación de Información (\textit{Information Retrieval}) evolucionaron hacia el paradigma de la Recuperación Aumentada por Generación (RAG, por sus siglas en inglés) \cite{prajwal2025multimodal}. No obstante, mientras que las arquitecturas RAG de primera generación operaban exclusivamente sobre cadenas de texto plano, los flujos multimedia contemporáneos requieren procesar, alinear e interpretar simultáneamente señales heterogéneas compuestas por secuencias de fotogramas, pistas de audio y texto libre \cite{prajwal2025multimodal, multi_rag2025}.
 
-La base matemática que permite a un sistema computacional operar sobre formatos tan dispares sin recurrir a reglas heurísticas manuales es el concepto de \textbf{representación vectorial densa} o \textbf{\textit{embedding}} \cite{gemini_emb2_docs}. Un \textit{embedding} es una proyección matemática que transforma un objeto de entrada arbitrario $x$ (ya sea una oración en lenguaje natural, una matriz de píxeles correspondiente a un fotograma de vídeo o una onda acústica) en un vector de números reales en coma flotante $\mathbf{v} \in \mathbb{R}^d$ dentro de un espacio métrico continuo de dimensión $d$ \cite{gemini_emb2_docs}:
+La base matemática que permite a un sistema computacional operar sobre formatos tan dispares sin recurrir a reglas heurísticas manuales es el concepto de \textbf{representación vectorial densa} o \textbf{\textit{embedding}} \cite{gemini_emb2_docs}. Un \textit{embedding} es una proyección matemática que transforma un objeto de entrada arbitrario $x$ (ya sea una oración en lenguaje natural, una matriz de píxeles correspondiente a un fotograma de vídeo o una onda acústica) en un vector de números reales en coma flotante $\mathbf{v} \in \mathbb{R}^d$ dentro de un espacio métrico continuo de dimensión $d$, según se formaliza en la Ecuación~\eqref{eq:proyeccion_multimodal} \cite{gemini_emb2_docs}:
 
 \begin{equation}
 f_{\theta}: \mathcal{X}_{\text{texto}} \cup \mathcal{X}_{\text{imagen}} \cup \mathcal{X}_{\text{vídeo}} \cup \mathcal{X}_{\text{audio}} \cup \mathcal{X}_{\text{PDF}} \longrightarrow \mathbb{R}^d
@@ -31,7 +31,7 @@ La literatura científica publicada entre 2024 y 2026 ha demostrado empíricamen
 \begin{enumerate}
     \item \textbf{Cuello de botella informacional:} La traducción de una escena tridimensional o de un fotograma complejo a palabras sueltas descarta toda la información visual no textual, tales como acciones físicas, colores, texturas, expresiones emocionales e interacciones implícitas entre objetos \cite{prajwal2025multimodal}.
     \item \textbf{Destrucción del diseño espacial (\textit{Layout}):} Cuando un sistema procesa diapositivas académicas, diagramas arquitectónicos, tablas financieras o editores de código fuente extrayendo únicamente los caracteres visibles mediante OCR, la disposición bidimensional (\textit{layout}) y las relaciones jerárquicas y topológicas entre los bloques visuales desaparecen por completo \cite{prajwal2025multimodal}.
-    \item \textbf{Propagación de errores en cascada:} Cualquier fallo de reconocimiento en el motor OCR —frecuente ante cambios de iluminación, tipografías pequeñas, compresión de vídeo o fondos oscuros— corrompe irreversiblemente el texto indexado, impidiendo que el motor de búsqueda recupere el segmento aunque el contenido visual original sea perfectamente claro para un observador \cite{prajwal2025multimodal}.
+    \item \textbf{Propagación de errores en cascada:} Cualquier fallo de reconocimiento en el motor OCR (frecuente ante cambios de iluminación, tipografías pequeñas, compresión de vídeo o fondos oscuros) corrompe irreversiblemente el texto indexado, impidiendo que el motor de búsqueda recupere el segmento aunque el contenido visual original sea perfectamente claro para un observador \cite{prajwal2025multimodal}.
 \end{enumerate}
 
 La Figura~\ref{fig:ocr_vs_multimodal} contrasta esquemáticamente el flujo tradicional dependiente de OCR frente al paradigma contemporáneo de vectorización multimodal directa \cite{prajwal2025multimodal}.
@@ -82,19 +82,19 @@ Una vez que el modelo fundacional proyecta tanto los fragmentos del archivo de v
 
 Sea $\mathbf{q} = (q_1, q_2, \dots, q_d)^\top \in \mathbb{R}^d$ el vector de \textit{embedding} correspondiente a una consulta textual (por ejemplo, \textit{``¿En qué momento se muestra un diccionario en el código?''}) y sea $\mathbf{v}_i = (v_{i,1}, v_{i,2}, \dots, v_{i,d})^\top \in \mathbb{R}^d$ el vector denso asociado al $i$-ésimo fragmento temporal $[t_{\text{inicio}}^{(i)}, t_{\text{fin}}^{(i)}]$ de un vídeo indexado. La literatura y las bases de datos vectoriales modernas emplean fundamentalmente dos operadores algebraicos para cuantificar la afinidad semántica entre $\mathbf{q}$ y $\mathbf{v}_i$ \cite{learnopencv_qwen3, gemini_emb2_docs}:
 
-\paragraph{1. Similitud del Coseno (\textit{Cosine Similarity}):} Mide el coseno del ángulo $\theta$ formado entre ambos vectores en el hiperplano $d$-dimensional, evaluando su alineación direccional con independencia de sus magnitudes absolutas:
+\paragraph{Similitud del Coseno (\textit{Cosine Similarity}):} Mide el coseno del ángulo $\theta$ formado entre ambos vectores en el hiperplano $d$-dimensional mediante la Ecuación~\eqref{eq:similitud_coseno}, evaluando su alineación direccional con independencia de sus magnitudes absolutas:
 \begin{equation}
 \text{sim}_{\cos}(\mathbf{q}, \mathbf{v}_i) = \cos(\theta) = \frac{\mathbf{q} \cdot \mathbf{v}_i}{\|\mathbf{q}\|_2 \, \|\mathbf{v}_i\|_2} = \frac{\sum_{j=1}^{d} q_j \, v_{i,j}}{\sqrt{\sum_{j=1}^{d} q_j^2} \, \sqrt{\sum_{j=1}^{d} v_{i,j}^2}} \in [-1, 1]
 \label{eq:similitud_coseno}
 \end{equation}
 Un valor cercano a $1$ indica una coincidencia semántica elevada (vectores colineales que apuntan hacia la misma región conceptual del espacio latente), un valor próximo a $0$ denota ortogonalidad (conceptos no relacionados) y valores negativos reflejan oposición semántica.
 
-\paragraph{2. Producto Punto Escalar (\textit{Scalar Dot Product}):} Definido algebraicamente como la suma de los productos componente a componente \cite{learnopencv_qwen3}:
+\paragraph{Producto Punto Escalar (\textit{Scalar Dot Product}):} Definido algebraicamente en la Ecuación~\eqref{eq:producto_punto} como la suma de los productos componente a componente \cite{learnopencv_qwen3}:
 \begin{equation}
 \text{sim}_{\text{dot}}(\mathbf{q}, \mathbf{v}_i) = \mathbf{q}^\top \mathbf{v}_i = \sum_{j=1}^{d} q_j \, v_{i,j}
 \label{eq:producto_punto}
 \end{equation}
-Cuando todos los vectores almacenados en la base de datos vectorial han sido previamente normalizados a longitud unitaria mediante la norma euclídea $L_2$ ($\|\mathbf{q}\|_2 = \|\mathbf{v}_i\|_2 = 1$), los denominadores de la Ecuación~\ref{eq:similitud_coseno} se vuelven exactamente igual a la unidad, haciendo que la Similitud del Coseno y el Producto Punto Escalar sean matemáticamente idénticos ($\text{sim}_{\cos}(\mathbf{q}, \mathbf{v}_i) = \mathbf{q}^\top \mathbf{v}_i$) \cite{learnopencv_qwen3}. Esta equivalencia resulta vital en sistemas de recuperación a escala de petabytes, ya que reduce la búsqueda a multiplicaciones matriciales altamente paralelizadas en hardware moderno \cite{learnopencv_qwen3}.
+Cuando todos los vectores almacenados en la base de datos vectorial han sido previamente normalizados a longitud unitaria mediante la norma euclídea $L_2$ ($\|\mathbf{q}\|_2 = \|\mathbf{v}_i\|_2 = 1$), los denominadores de la Ecuación~\eqref{eq:similitud_coseno} se vuelven exactamente igual a la unidad, haciendo que la Similitud del Coseno y el Producto Punto Escalar sean matemáticamente idénticos ($\text{sim}_{\cos}(\mathbf{q}, \mathbf{v}_i) = \mathbf{q}^\top \mathbf{v}_i$) \cite{learnopencv_qwen3}. Esta equivalencia resulta vital en sistemas de recuperación a escala de petabytes, ya que reduce la búsqueda a multiplicaciones matriciales altamente paralelizadas en hardware moderno \cite{learnopencv_qwen3}.
 
 \begin{figure}[htbp]
 \centering
@@ -135,7 +135,7 @@ La Figura~\ref{fig:espacio_semantico_comun} ilustra esta convergencia geométric
 
 Uno de los mayores retos de ingeniería al escalar sistemas de vectorización multimodal a millones de fragmentos de vídeo reside en la rígida dependencia entre la dimensionalidad de salida $d$ del modelo y el consumo de memoria RAM y almacenamiento en la base de datos vectorial \cite{learnopencv_qwen3, qwen3_vl_emb2026}. En los modelos de \textit{embeddings} tradicionales, toda la información semántica se distribuye de manera uniforme y difusa a lo largo de todas las coordenadas del vector $(v_1, v_2, \dots, v_d)$; en consecuencia, recortar un vector clásico sin volver a entrenar la red neuronal destruye su estructura topológica y provoca una caída drástica en la precisión de búsqueda \cite{learnopencv_qwen3}.
 
-Para dotar de elasticidad dimensional a las arquitecturas modernas —tales como \textbf{Gemini Embedding 2}, \textbf{Qwen3-VL-Embedding} y \textbf{EmbeddingGemma 2}—, el estado del arte ha estandarizado el \textbf{Aprendizaje de Representación Matryoshka} (\textit{Matryoshka Representation Learning}, \textbf{MRL}) \cite{gemini_emb2_docs, qwen3_vl_emb2026}. Inspirado en las muñecas rusas anidadas (\textit{matryoshkas}), el entrenamiento mediante la función de pérdida \textit{MatryoshkaLoss} optimiza simultáneamente un conjunto de sub-dimensiones anidadas $\mathcal{M} = \{m_1, m_2, \dots, m_k\}$ donde $m_1 < m_2 < \dots < m_k = d$ (por ejemplo, $\mathcal{M} = \{64, 128, 256, 512, 768, 1024, 1536, 3072, 4096\}$) \cite{learnopencv_qwen3, gemini_emb2_docs, qwen3_vl_emb2026}. Formalmente, la pérdida total durante el entrenamiento contrastivo se calcula como la suma ponderada de las pérdidas evaluadas sobre cada prefijo truncado $\mathbf{v}_{1:m} \in \mathbb{R}^m$ \cite{learnopencv_qwen3}:
+Para dotar de elasticidad dimensional a las arquitecturas modernas (tales como \textbf{Gemini Embedding 2}, \textbf{Qwen3-VL-Embedding} y \textbf{EmbeddingGemma 2}), el estado del arte ha estandarizado el \textbf{Aprendizaje de Representación Matryoshka} (\textit{Matryoshka Representation Learning}, \textbf{MRL}) \cite{gemini_emb2_docs, qwen3_vl_emb2026}. Inspirado en las muñecas rusas anidadas (\textit{matryoshkas}), el entrenamiento mediante la función de pérdida \textit{MatryoshkaLoss} optimiza simultáneamente un conjunto de sub-dimensiones anidadas $\mathcal{M} = \{m_1, m_2, \dots, m_k\}$ donde $m_1 < m_2 < \dots < m_k = d$ (por ejemplo, $\mathcal{M} = \{64, 128, 256, 512, 768, 1024, 1536, 3072, 4096\}$) \cite{learnopencv_qwen3, gemini_emb2_docs, qwen3_vl_emb2026}. Formalmente, la pérdida total durante el entrenamiento contrastivo se expresa mediante la Ecuación~\eqref{eq:matryoshka_loss} como la suma ponderada de las pérdidas evaluadas sobre cada prefijo truncado $\mathbf{v}_{1:m} \in \mathbb{R}^m$ \cite{learnopencv_qwen3}:
 
 \begin{equation}
 \mathcal{L}_{\text{MRL}}(\mathbf{q}, \mathbf{v}) = \sum_{m \in \mathcal{M}} c_m \cdot \mathcal{L}_{\text{contrastiva}}\!\left(\mathbf{q}_{1:m}, \mathbf{v}_{1:m}\right)
@@ -178,7 +178,7 @@ Esta formulación obliga a la red neuronal a jerarquizar la varianza semántica,
 \label{fig:matryoshka_mrl}
 \end{figure}
 
-Ahora bien, desde el punto de vista de la implementación algorítmica rigurosa, truncar un vector unitario $\mathbf{v} \in \mathbb{R}^{D}$ (donde $\|\mathbf{v}\|_2 = 1$) a sus primeras $d < D$ componentes ($\mathbf{v}_{1:d}$) hace que la suma de cuadrados de las coordenadas retenidas sea estrictamente menor que la unidad ($\sum_{j=1}^{d} v_j^2 < 1$). Dado que los vectores truncados (por ejemplo, al configurar $d = 768$ o $d = 1536$ en lugar de las $3072$ dimensiones completas en \textit{Gemini Embedding 2}) no vienen normalizados de fábrica tras el corte, resulta obligatorio aplicar una etapa explícita de \textbf{re-normalización mediante la norma euclídea $L_2$} antes de insertarlos en la base de datos vectorial \cite{gemini_emb2_docs}:
+Ahora bien, desde el punto de vista de la implementación algorítmica rigurosa, truncar un vector unitario $\mathbf{v} \in \mathbb{R}^{D}$ (donde $\|\mathbf{v}\|_2 = 1$) a sus primeras $d < D$ componentes ($\mathbf{v}_{1:d}$) hace que la suma de cuadrados de las coordenadas retenidas sea estrictamente menor que la unidad ($\sum_{j=1}^{d} v_j^2 < 1$). Dado que los vectores truncados (por ejemplo, al configurar $d = 768$ o $d = 1536$ en lugar de las $3072$ dimensiones completas en \textit{Gemini Embedding 2}) no vienen normalizados de fábrica tras el corte, resulta obligatorio aplicar una etapa explícita de \textbf{re-normalización mediante la norma euclídea $L_2$} según se define en la Ecuación~\eqref{eq:renormalizacion_l2_mrl} antes de insertarlos en la base de datos vectorial \cite{gemini_emb2_docs}:
 
 \begin{equation}
 \hat{\mathbf{v}}_{1:d} = \frac{\mathbf{v}_{1:d}}{\|\mathbf{v}_{1:d}\|_2} = \frac{(v_1, v_2, \dots, v_d)^\top}{\sqrt{\sum_{j=1}^{d} v_j^2}}
@@ -194,20 +194,22 @@ La elección de la dimensionalidad operativa del espacio latente introduce un co
 
 \begin{table}[htbp]
 \centering
+\small
+\setlength{\tabcolsep}{4.5pt}
 \caption{Comparativa técnica del impacto de la dimensionalidad vectorial y el soporte MRL sobre la precisión semántica y el coste de almacenamiento en bases de datos vectoriales \cite{gemini_emb2_docs, qwen3_vl_emb2026}.}
 \label{tab:compromiso_dimensiones}
-\begin{tabular}{lllll}
-\hline
-\textbf{Configuración Dimensional} & \textbf{Modelos de Referencia} & \textbf{Peso por Vector (FP32)} & \textbf{Normalización $L_2$} & \textbf{Caso de Uso Óptimo} \\
-\hline
+\begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}p{2.7cm} >{\raggedright\arraybackslash}p{3.3cm} >{\centering\arraybackslash}p{1.6cm} >{\centering\arraybackslash}p{1.7cm} >{\raggedright\arraybackslash}X}
+\toprule
+\textbf{Configuración} & \textbf{Modelos de Referencia} & \textbf{Peso (FP32)} & \textbf{Norm. $L_2$} & \textbf{Caso de Uso Óptimo} \\
+\midrule
 4.096 dim (Máx. Open) & Qwen3-VL-Embedding-8B & 16,0 KB & Nativa & Máxima resolución en servidor GPU local \\
 3.072 dim (Máx. Cloud) & Gemini Embedding 2 & 12,0 KB & Nativa & \textit{Baseline} de máxima precisión y millones de reg. \\
 2.048 dim (Intermedia) & Qwen3-VL-Embedding-2B & 8,0 KB & Nativa / MRL & Despliegue local equilibrado en VRAM \\
-1.536 dim (MRL Medio) & Gemini Embedding 2 & 6,0 KB & Requerida post-corte & Reducción del 50\% en RAM con alta fidelidad \\
-768 dim (Estándar) & Gemini 2 / EmbeddingGemma 2 & 3,0 KB & Requerida post-corte & Ahorro del 75\% en BD y consultas ultrarrápidas \\
-64 -- 256 dim (Ultraligero) & Qwen3-VL / EmbeddingGemma 2 & 0,25 -- 1,0 KB & Requerida post-corte & \textit{Edge computing}, dispositivos móviles y pre-filtrado \\
-\hline
-\end{tabular}
+1.536 dim (MRL Medio) & Gemini Embedding 2 & 6,0 KB & Post-corte & Reducción del 50\% en RAM con alta fidelidad \\
+768 dim (Estándar) & Gemini 2 / EmbeddingGemma 2 & 3,0 KB & Post-corte & Ahorro del 75\% en BD y consultas ultrarrápidas \\
+64 - 256 dim (Ultraligero) & Qwen3-VL / EmbeddingGemma 2 & 0,25 - 1,0 KB & Post-corte & \textit{Edge computing}, dispositivos móviles y pre-filtrado \\
+\bottomrule
+\end{tabularx}
 \end{table}
 
-Por el contrario, operar sobre un estándar de \textbf{768 dimensiones} —que constituye el tope nativo de modelos ligeros modulares como \textit{EmbeddingGemma 2} (con posibilidad de truncado adicional a $256$ o $128$ dimensiones) y uno de los puntos de corte recomendados en \textit{Gemini Embedding 2}— reduce exactamente en un $75\%$ la huella de memoria de cada vector respecto a las $3.072$ dimensiones (pasando de $12,0\,\text{KB}$ a $3,0\,\text{KB}$ por fragmento en precisión simple de 32 bits). Esta compresión hace que la base de datos vectorial resultante sea significativamente más económica de alojar en memoria RAM y más rápida de consultar localmente, a cambio de asumir una ligera reducción en la granularidad semántica fina frente al vector completo de $3.072$ dimensiones.
+Por el contrario, operar sobre un estándar de \textbf{768 dimensiones} (que constituye el tope nativo de modelos ligeros modulares como \textit{EmbeddingGemma 2} (con posibilidad de truncado adicional a $256$ o $128$ dimensiones) y uno de los puntos de corte recomendados en \textit{Gemini Embedding 2}) reduce exactamente en un $75\%$ la huella de memoria de cada vector respecto a las $3.072$ dimensiones (pasando de $12,0\,\text{KB}$ a $3,0\,\text{KB}$ por fragmento en precisión simple de 32 bits). Esta compresión hace que la base de datos vectorial resultante sea significativamente más económica de alojar en memoria RAM y más rápida de consultar localmente, a cambio de asumir una ligera reducción en la granularidad semántica fina frente al vector completo de $3.072$ dimensiones.

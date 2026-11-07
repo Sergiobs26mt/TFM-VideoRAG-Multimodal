@@ -17,7 +17,7 @@ Dentro de la literatura científica consolidada entre 2024 y 2026, destacan tres
 \begin{itemize}
     \item \textbf{Marco \textit{Video-RAG} (\textit{Visually-aligned Retrieval-Augmented Long Video Comprehension}):} Propone una arquitectura de recuperación alineada visualmente que complementa los fotogramas del vídeo mediante la extracción e indexación paralela de tres canales auxiliares: texto visible en pantalla obtenido por OCR, transcripciones auditivas y metadatos estructurados de detección de objetos \cite{video_rag2024}. %[cite: 3]
     Al recuperar conjuntamente las señales visuales y sus descriptores alineados, el sistema reduce la carga de contexto sobre el modelo generativo al analizar vídeos extensos \cite{video_rag2024}. %[cite: 3]
-    \item \textbf{Sistema \textit{CARVE} (\textit{Cross-Modal and Multi-Granularity Retrieval}):} Aborda el problema de que los eventos de interés en un vídeo no poseen una duración uniforme —algunos sucesos duran apenas un segundo (como un gesto o la aparición fugaz de una línea de código) mientras que otros abarcan varios minutos (como la explicación completa de un diagrama)—. %[cite: 3, 6]
+    \item \textbf{Sistema \textit{CARVE} (\textit{Cross-Modal and Multi-Granularity Retrieval}):} Aborda el problema de que los eventos de interés en un vídeo no poseen una duración uniforme (algunos sucesos duran apenas un segundo (como un gesto o la aparición fugaz de una línea de código) mientras que otros abarcan varios minutos (como la explicación completa de un diagrama)). %[cite: 3, 6]
     \textit{CARVE} introduce un mecanismo de recuperación intermodal multigranular capaz de evaluar simultáneamente distintas escalas temporales, logrando superar de forma consistente a los métodos tradicionales de ventana única en métricas estándar de ordenación como \textbf{\textit{Recall@5}} y \textbf{\textit{nDCG@5}}. %[cite: 3]
     \item \textbf{Plataforma \textit{Multi-RAG} (\textit{Adaptive Video Understanding}):} Introduce una capa de aplicación práctica concebida como soporte cognitivo para la interacción humano-robot sobre flujos de vídeo capturados en tiempo real en entornos dinámicos y no estructurados \cite{multi_rag2025, arxiv_adaptive_2505}. %[cite: 5]
     Su principal aportación científica reside en demostrar que las representaciones vectoriales multimodales mantienen una inferencia semántica de alto rendimiento incluso cuando la señal visual se encuentra temporalmente degradada o limitada, evidenciando la viabilidad de los \textit{embeddings} multimodales bajo fuertes restricciones de recursos \cite{multi_rag2025}. %[cite: 5]
@@ -84,27 +84,34 @@ La Figura~\ref{fig:emparejamiento_vs_grounding_temporal} contrasta la salida de 
 \begin{figure}[htbp]
 \centering
 \begin{tikzpicture}[
-    node distance=0.5cm and 0.7cm,
-    oldbox/.style={rectangle, draw=red!80!black, fill=red!8, thick, minimum width=12.8cm, minimum height=1.15cm, align=center, font=\scriptsize, rounded corners=2pt},
-    timebox/.style={rectangle, draw=blue!80!black, fill=blue!10, thick, minimum width=2.8cm, minimum height=1.1cm, align=center, font=\scriptsize, rounded corners=2pt},
-    groundbox/.style={rectangle, draw=green!60!black, fill=green!12, very thick, minimum width=12.8cm, minimum height=1.35cm, align=center, font=\scriptsize, rounded corners=2pt},
-    arrow/.style={-stealth, thick, draw=black!80}
+    oldbox/.style={rectangle, draw=red!80!black, fill=red!6, thick, minimum width=15.2cm, minimum height=1.15cm, align=center, font=\scriptsize, rounded corners=3pt, inner sep=6pt},
+    timebox/.style={rectangle, draw=blue!80!black, fill=blue!8, thick, minimum width=4.0cm, minimum height=1.25cm, align=center, font=\scriptsize, rounded corners=3pt},
+    anchorbox/.style={rectangle, draw=orange!90!black, fill=orange!12, very thick, minimum width=4.2cm, minimum height=1.25cm, align=center, font=\scriptsize, rounded corners=3pt},
+    groundbox/.style={rectangle, draw=green!60!black, fill=green!10, very thick, minimum width=15.2cm, minimum height=1.35cm, align=center, font=\scriptsize, rounded corners=3pt, inner sep=6pt},
+    seqarrow/.style={-stealth, thick, draw=black!70}
 ]
 % Paradigma Antiguo
-\node[oldbox] (old) at (0, 2.3) {\textbf{Paradigma Clásico (Emparejamiento Temático Global):}\\
-Consulta $\longrightarrow$ Resumen difuso sin localización exacta (\textit{``El vídeo trata sobre economía o programación en Python''})};
+\node[oldbox] (old) at (0, 2.65) {\textbf{Paradigma Clásico (Emparejamiento Temático Global)}\\[2pt]
+Consulta $\longrightarrow$ Resumen difuso sin localización temporal exacta (\textit{``El vídeo trata sobre economía o programación en Python''})};
 
-% Línea de tiempo determinista
-\draw[-stealth, very thick, black!80] (-6.4, 0.7) -- (6.4, 0.7) node[right, font=\scriptsize\bfseries] {$t$ (s)};
-\node[timebox] (c1) at (-4.2, 0.7) {Plano $i-1$\\$[00:35.0 - 01:01.0]$\\Listas y Variables};
-\node[timebox, draw=orange!90!black, fill=orange!15, very thick] (c2) at (0.0, 0.7) {\textbf{Evento Anclado $i$}\\$[01:01.1 - 01:12.4]$\\Código \texttt{dict} + Voz};
-\node[timebox] (c3) at (4.2, 0.7) {Plano $i+1$\\$[01:12.5 - 01:40.2]$\\Condicionales \texttt{if/else}};
+% Secuencia temporal de planos
+\node[timebox] (c1) at (-4.7, 0.85) {Plano $i-1$\\[2pt]\textbf{[00:35,0 - 01:01,0]}\\[1pt]Listas y Variables};
+\node[anchorbox] (c2) at (0.0, 0.85) {\textbf{Evento Anclado $i$}\\[2pt]\textbf{[01:01,1 - 01:12,4]}\\[1pt]Código \texttt{dict} + Pista de Voz};
+\node[timebox] (c3) at (4.7, 0.85) {Plano $i+1$\\[2pt]\textbf{[01:12,5 - 01:40,2]}\\[1pt]Condicionales \texttt{if/else}};
+
+% Flujo de tiempo secuencial
+\draw[thick, black!40, dashed] (-6.8, 0.85) -- (c1.west);
+\draw[seqarrow] (c1.east) -- (c2.west);
+\draw[seqarrow] (c2.east) -- (c3.west);
+\draw[seqarrow] (c3.east) -- (6.8, 0.85) node[right, font=\scriptsize\bfseries] {$t$ (s)};
 
 % Paradigma Grounding Temporal
-\node[groundbox] (new) at (0, -1.1) {\textbf{Paradigma Estado del Arte 2026 (\textit{Temporal Grounding} / Anclaje Causal Espaciotemporal):}\\
-Localización determinista del intervalo exacto (\texttt{start\_time} -- \texttt{end\_time}), vinculando simultáneamente la región visual\\(cuadrante de pantalla / código fuente), la transcripción hablada en ese segundo y la identidad del hablante};
+\node[groundbox] (new) at (0, -0.95) {\textbf{Paradigma Estado del Arte 2026 (\textit{Temporal Grounding} / Anclaje Causal Espaciotemporal)}\\[2pt]
+Localización determinista del intervalo exacto (\texttt{start\_time} - \texttt{end\_time} $\to$ \textbf{01:01,1 - 01:12,4}), vinculando simultáneamente:\\
+la región visual (cuadrante de pantalla / código fuente), la transcripción hablada en ese segundo y la identidad del hablante};
 
-\draw[arrow, very thick, orange!90!black] (c2.south) -- (new.north);
+% Flecha de anclaje causal
+\draw[-stealth, very thick, orange!90!black] (c2.south) -- (new.north) node[midway, right=2pt, font=\scriptsize\bfseries, orange!90!black] {Anclaje multimodal exacto};
 \end{tikzpicture}
 \caption{Contraste entre el emparejamiento temático tradicional y el Anclaje Causal Espaciotemporal (\textit{Temporal Grounding}), el cual proporciona trazabilidad determinista y auditable sobre la línea de tiempo del vídeo \cite{mixpeek_chunking, gemini_emb2_docs}.} %[cite: 5, 6]
 \label{fig:emparejamiento_vs_grounding_temporal}
@@ -127,11 +134,11 @@ Si bien la teoría de los modelos fundacionales multimodales postula la eliminac
 En una arquitectura de búsqueda en dos etapas que utiliza \textit{Gemini Embedding 2} (vía Qdrant) para recuperar los fragmentos candidatos y emplea un modelo ligero secundario (\textit{Gemini 1.5 Flash Lite} o \textit{Gemini Flash 3.5}) como verificador visual para descartar falsos positivos, un ajuste agresivo de los hiperparámetros de codificación visual induce fallos críticos de falso rechazo (falsos negativos). %[cite: 3]
 
 Durante las pruebas empíricas sobre el vídeo de validación \texttt{python\_tutorial.mp4} (\textit{``Python en 8 Minutos''}), al ejecutar la consulta \texttt{"Diccionarios"}, el motor vectorial recuperó en la quinta posición el intervalo temporal $01\text{:}01.1\text{ -- }01\text{:}40.2$ ($61,1\text{ s -- }100,2\text{ s}$). %[cite: 3]
-Aunque la verdad terreno (\textit{ground truth}) del vídeo muestra explícitamente en pantalla entre los segundos $01\text{:}01.0$ y $01\text{:}03.0$ la sintaxis de un diccionario en Python (\texttt{dict \{"name": "Brais"\}}), el verificador visual descartó erróneamente el fragmento emitiendo el diagnóstico: \textit{``Descartado (Falso Positivo: 0\%) -- Análisis visual: El segmento cubre listas y variables, pero no muestra diccionarios''}. %[cite: 3]
+Aunque la verdad terreno (\textit{ground truth}) del vídeo muestra explícitamente en pantalla entre los segundos $01\text{:}01.0$ y $01\text{:}03.0$ la sintaxis de un diccionario en Python (\texttt{dict \{"name": "Brais"\}}), el verificador visual descartó erróneamente el fragmento emitiendo el diagnóstico: \textit{``Descartado (Falso Positivo: 0\%) - Análisis visual: El segmento cubre listas y variables, pero no muestra diccionarios''}. %[cite: 3]
 
 La auditoría técnica de los parámetros de indexación demuestra que este fallo perceptivo responde a dos cuellos de botella en la codificación de los fotogramas clave antes de su envío a la API: %[cite: 3]
 \begin{enumerate}
-    \item \textbf{Resolución espacial destructiva (\texttt{resize\_width = 512}\text{ px}):} Redimensionar un videotutorial grabado en alta definición —donde el código fuente ocupa una fracción reducida del editor en pantalla— a un ancho máximo de $512$ píxeles reduce la altura de las tipografías a apenas unos pocos píxeles borrosos. %[cite: 3]
+    \item \textbf{Resolución espacial destructiva (\texttt{resize\_width = 512}\text{ px}):} Redimensionar un videotutorial grabado en alta definición (donde el código fuente ocupa una fracción reducida del editor en pantalla) a un ancho máximo de $512$ píxeles reduce la altura de las tipografías a apenas unos pocos píxeles borrosos. %[cite: 3]
     Incluso manteniendo una calidad JPEG alta ($80$), a $512\text{ px}$ los caracteres de la palabra reservada \texttt{dict} y las llaves \texttt{\{\}} pierden su definición geométrica, impidiendo que tanto \textit{Gemini Embedding 2} como \textit{Gemini Flash} puedan leer la sintaxis. %[cite: 3]
     \item \textbf{Cuantización JPEG agresiva (\texttt{jpeg\_quality = 12} o \texttt{20}):} Cuando además de baja resolución se aplica un factor de calidad JPEG extremo ($12$ o $20$ en la escala $1\text{--}100$ de \texttt{cv2.imencode}), los macrobloques de la Transformada Discreta del Coseno (DCT) difuminan por completo los bordes de alto contraste del texto sobre el fondo del editor, convirtiendo el código en un artefacto ilegible. %[cite: 3]
 \end{enumerate}
@@ -141,30 +148,32 @@ La Figura~\ref{fig:cuello_botella_ocr_implicito} esquematiza el mecanismo exacto
 \begin{figure}[htbp]
 \centering
 \begin{tikzpicture}[
-    node distance=0.5cm and 0.65cm,
-    srcbox/.style={rectangle, draw=black!80, fill=gray!10, thick, minimum width=2.8cm, minimum height=1.25cm, align=center, font=\scriptsize, rounded corners=2pt},
-    badproc/.style={rectangle, draw=red!80!black, fill=red!8, thick, minimum width=3.4cm, minimum height=1.15cm, align=center, font=\scriptsize, rounded corners=2pt},
-    goodproc/.style={rectangle, draw=green!60!black, fill=green!8, thick, minimum width=3.4cm, minimum height=1.15cm, align=center, font=\scriptsize, rounded corners=2pt},
-    badout/.style={rectangle, draw=red!85!black, fill=red!15, very thick, minimum width=4.5cm, minimum height=1.15cm, align=center, font=\scriptsize, rounded corners=2pt},
-    goodout/.style={rectangle, draw=green!60!black, fill=green!15, very thick, minimum width=4.5cm, minimum height=1.15cm, align=center, font=\scriptsize, rounded corners=2pt},
-    arrow/.style={-stealth, thick, draw=black!80}
+    srcbox/.style={rectangle, draw=black!80, fill=gray!10, thick, text width=3.6cm, minimum height=1.35cm, align=center, font=\scriptsize, rounded corners=3pt},
+    badproc/.style={rectangle, draw=red!80!black, fill=red!8, thick, text width=3.8cm, minimum height=1.35cm, align=center, font=\scriptsize, rounded corners=3pt},
+    goodproc/.style={rectangle, draw=green!60!black, fill=green!8, thick, text width=3.8cm, minimum height=1.35cm, align=center, font=\scriptsize, rounded corners=3pt},
+    badout/.style={rectangle, draw=red!85!black, fill=red!15, very thick, text width=5.6cm, minimum height=1.35cm, align=center, font=\scriptsize, rounded corners=3pt},
+    goodout/.style={rectangle, draw=green!60!black, fill=green!15, very thick, text width=5.6cm, minimum height=1.35cm, align=center, font=\scriptsize, rounded corners=3pt},
+    arrow/.style={-stealth, thick}
 ]
-\node[srcbox] (frame) at (-5.2, 0.0) {Fotograma Original HD\\($t = 01\text{:}01.0\text{ -- }01\text{:}03.0$)\\Código: \texttt{dict \{"name": "Brais"\}}};
+\node[srcbox] (frame) at (-5.8, 0.0) {\textbf{Fotograma Original HD}\\[2pt]{\scriptsize $t = 01\text{:}01,0\text{ - }01\text{:}03,0$}\\[1pt]{\scriptsize Código: \texttt{dict \{"name": "Brais"\}}}};
 
 % Rama Superior: Degradación Crítica
-\node[badproc] (b_enc) at (-1.1, 1.0) {\textbf{Preprocesamiento Destructivo}\\Ancho máx: \texttt{512 px}\\Calidad JPEG: \texttt{12 -- 20}};
-\node[badout] (b_vlm) at (3.9, 1.0) {\textbf{Fallo OCR Implícito (\textit{Flash Lite})}\\Texto borroso e ilegible $\to$ \textbf{Falso Negativo}\\(\textit{``No muestra diccionarios''} -- Score 0\%)};
+\node[badproc] (b_enc) at (-0.7, 1.25) {\textbf{Preprocesamiento Destructivo}\\[2pt]{\scriptsize Ancho máx: \texttt{512 px}}\\[1pt]{\scriptsize Calidad JPEG: \texttt{12 - 20}}};
+\node[badout] (b_vlm) at (5.0, 1.25) {\textbf{Fallo OCR Implícito (\textit{Flash Lite})}\\[2pt]{\scriptsize Texto borroso e ilegible $\longrightarrow$ \textbf{Falso Negativo}}\\[1pt]{\scriptsize (\textit{``No muestra diccionarios''} - Score 0\%)}};
 
 % Rama Inferior: Calibración Óptima
-\node[goodproc] (g_enc) at (-1.1, -1.0) {\textbf{Preprocesamiento Calibrado}\\Ancho máx: \texttt{768 -- 1280 px}\\Calidad JPEG: \texttt{50 -- 90}};
-\node[goodout] (g_vlm) at (3.9, -1.0) {\textbf{Lectura Visual Exitosa (\textit{Flash Lite})}\\Bordes tipográficos nítidos $\to$ \textbf{Validado}\\Reconoce sintaxis \texttt{dict} en pantalla};
+\node[goodproc] (g_enc) at (-0.7, -1.25) {\textbf{Preprocesamiento Calibrado}\\[2pt]{\scriptsize Ancho máx: \texttt{768 - 1280 px}}\\[1pt]{\scriptsize Calidad JPEG: \texttt{50 - 90}}};
+\node[goodout] (g_vlm) at (5.0, -1.25) {\textbf{Lectura Visual Exitosa (\textit{Flash Lite})}\\[2pt]{\scriptsize Bordes tipográficos nítidos $\longrightarrow$ \textbf{Validado}}\\[1pt]{\scriptsize Reconoce sintaxis \texttt{dict} en pantalla}};
 
-\draw[arrow, red!80!black, thick] (frame.north east) -- (b_enc.west);
-\draw[arrow, red!80!black, very thick] (b_enc.east) -- (b_vlm.west);
-\draw[arrow, green!60!black, thick] (frame.south east) -- (g_enc.west);
-\draw[arrow, green!60!black, very thick] (g_enc.east) -- (g_vlm.west);
+% Conexiones con bifurcación limpia
+\draw[thick, black!60] (frame.east) -- ++(0.6, 0) coordinate (fork);
+\draw[arrow, draw=red!80!black] (fork) |- (b_enc.west);
+\draw[arrow, draw=green!60!black] (fork) |- (g_enc.west);
+
+\draw[arrow, draw=red!80!black, very thick] (b_enc.east) -- (b_vlm.west);
+\draw[arrow, draw=green!60!black, very thick] (g_enc.east) -- (g_vlm.west);
 \end{tikzpicture}
-\caption{Diagnóstico del cuello de botella perceptivo en la etapa de verificación visual: el escalado a $512\text{ px}$ combinado con compresión JPEG agresiva ($12\text{--}20$) impide el OCR implícito de sintaxis de programación en pantalla, mientras que elevar \texttt{resize\_width} al rango $768\text{--}1280\text{ px}$ y la calidad JPEG a $50\text{--}90$ restaura la detección sin disparar el consumo de cuota.} %[cite: 3]
+\caption{Diagnóstico del cuello de botella perceptivo en la etapa de verificación visual: el escalado a $512\text{ px}$ combinado con compresión JPEG agresiva ($12\text{-}20$) impide el OCR implícito de sintaxis de programación en pantalla, mientras que elevar \texttt{resize\_width} al rango $768\text{-}1280\text{ px}$ y la calidad JPEG a $50\text{-}90$ restaura la detección sin disparar el consumo de cuota.} %[cite: 3]
 \label{fig:cuello_botella_ocr_implicito}
 \end{figure}
 
@@ -172,9 +181,9 @@ La Figura~\ref{fig:cuello_botella_ocr_implicito} esquematiza el mecanismo exacto
 \label{subsubsec:dilucion_semantica_muestreo}
 
 El segundo fenómeno crítico identificado durante la validación del sistema es el problema de la \textbf{dilución semántica y pérdida de fotogramas clave} en fragmentos de larga duración. %[cite: 3]
-En vídeos con un fondo visual altamente estático —tales como clases grabadas, presentaciones de diapositivas o tutoriales de código donde el entorno gráfico del editor permanece inalterado y únicamente cambian unas pocas líneas de texto—, el índice de similitud estructural (SSIM) entre fotogramas consecutivos se mantiene elevado durante largos periodos. %[cite: 3]
+En vídeos con un fondo visual altamente estático (tales como clases grabadas, presentaciones de diapositivas o tutoriales de código donde el entorno gráfico del editor permanece inalterado y únicamente cambian unas pocas líneas de texto), el índice de similitud estructural (SSIM) entre fotogramas consecutivos se mantiene elevado durante largos periodos. %[cite: 3]
 
-Cuando el umbral de corte SSIM se configura en un valor demasiado permisivo (\texttt{threshold = 0.08}) o incluso en un valor moderado (\texttt{threshold = 0.60}) sin imponer una duración máxima de plano, el algoritmo agrupa secuencias extensas en un único \texttt{VideoChunk} —como el citado fragmento \#5 de $39,1$ segundos de duración ($01\text{:}01.1\text{ -- }01\text{:}40.2$)—. %[cite: 3]
+Cuando el umbral de corte SSIM se configura en un valor demasiado permisivo (\texttt{threshold = 0.08}) o incluso en un valor moderado (\texttt{threshold = 0.60}) sin imponer una duración máxima de plano, el algoritmo agrupa secuencias extensas en un único \texttt{VideoChunk} (como el citado fragmento \#5 de $39,1$ segundos de duración ($01\text{:}01.1\text{ -- }01\text{:}40.2$)). %[cite: 3]
 A una cadencia estándar de $f_{\text{fps}} = 30$ fotogramas por segundo, un fragmento de $\Delta T = 39,1\text{ s}$ contiene un total de $N_{\text{total}} = \Delta T \times f_{\text{fps}} \approx 1.173$ fotogramas. %[cite: 3]
 Dado que la función \texttt{extract\_key\_frames} selecciona un número estático de $k = 3$ fotogramas por fragmento (inicial, final y máxima entropía), la fracción de cobertura temporal cae drásticamente, provocando dos efectos adversos: %[cite: 3]
 \begin{itemize}
@@ -186,36 +195,40 @@ La Figura~\ref{fig:dilucion_semantica_chunks_largos} ilustra gráficamente cómo
 
 \begin{figure}[htbp]
 \centering
-\begin{tikzpicture}[scale=0.95]
-% Caso A: Chunk Gigante (39.1s) con pérdida de fotograma clave
-\node[font=\scriptsize\bfseries, anchor=west] at (0, 2.5) {(a) Fragmento Masivo sin Límite Superior ($\Delta T = 39,1\text{ s}$, Umbral SSIM $= 0,08 / 0,60$ en vídeo estático):};
-\draw[fill=red!8, draw=red!80!black, thick, rounded corners=2pt] (0, 1.3) rectangle (12.6, 2.2);
-\node[font=\scriptsize, red!80!black] at (6.3, 1.75) {\texttt{VideoChunk \#5} ($01\text{:}01.1 \longrightarrow 01\text{:}40.2$) --- Mezcla Variables, Listas y Diccionarios (Dilución Semántica)};
+\begin{tikzpicture}[
+    subbox/.style={rectangle, draw=black!70, fill=gray!10, thick, rounded corners=2pt, minimum width=3.4cm, minimum height=1.15cm, align=center, font=\scriptsize},
+    activebox/.style={rectangle, draw=green!60!black, fill=green!12, very thick, rounded corners=2pt, minimum width=3.4cm, minimum height=1.15cm, align=center, font=\scriptsize}
+]
+% Caso A: Chunk Gigante (39.1s)
+\node[font=\scriptsize\bfseries, anchor=west] at (0, 3.35) {(a) Fragmento Masivo sin Límite Superior ($\Delta T = 39,1\text{ s}$, Umbral SSIM $= 0,08 / 0,60$ en vídeo estático):};
+
+% Contenedor chunk gigante
+\draw[fill=red!6, draw=red!80!black, thick, rounded corners=2pt] (0, 1.45) rectangle (14.5, 2.65);
 
 % Zona donde ocurre realmente el diccionario
-\draw[fill=yellow!35, draw=orange!90!black, very thick] (0.2, 1.3) rectangle (1.3, 2.2);
-\node[above, font=\tiny\bfseries, orange!90!black] at (0.75, 2.2) {Evento \texttt{dict} ($01\text{:}03$)};
+\draw[fill=yellow!40, draw=orange!90!black, very thick, rounded corners=1pt] (0.2, 1.55) rectangle (2.2, 2.55);
+\node[font=\scriptsize\bfseries, orange!90!black, align=center] at (1.2, 2.05) {Evento \texttt{dict}\\($t = 01\text{:}03$)};
 
-% Los 3 fotogramas muestreados (F1, F_entropia, F3) que fallan el evento
-\filldraw[blue!80!black] (0.05, 1.75) circle (3pt) node[below=4pt, font=\tiny\bfseries] {$F_{\text{ini}}$};
-\filldraw[blue!80!black] (7.8, 1.75) circle (3pt) node[below=4pt, font=\tiny\bfseries] {$F_{\text{entropía}}$ (Listas)};
-\filldraw[blue!80!black] (12.55, 1.75) circle (3pt) node[below=4pt, font=\tiny\bfseries] {$F_{\text{fin}}$};
+% Texto descriptivo del chunk gigante
+\node[font=\scriptsize, red!85!black, align=center] at (8.3, 2.05) {\texttt{VideoChunk \#5} ($01\text{:}01.1 \longrightarrow 01\text{:}40.2$)\\[1pt]Mezcla Variables, Listas y Diccionarios $\longrightarrow$ \textbf{Dilución Semántica}};
 
-% Caso B: Corrección mediante max_shot_frames (10-15s) o Muestreo Proporcional
-\node[font=\scriptsize\bfseries, anchor=west] at (0, 0.35) {(b) Solución Arquitectónica: Corte Forzado por Duración Máxima (\texttt{max\_shot\_frames} $\approx 10\text{--}15\text{ s}$) o Muestreo Dinámico:};
-\draw[fill=green!12, draw=green!60!black, very thick, rounded corners=2pt] (0, -0.8) rectangle (3.1, 0.05);
-\node[font=\tiny\bfseries, green!50!black] at (1.55, -0.37) {Sub-Chunk 5a ($01\text{:}01\text{--}01\text{:}11$): \textbf{Captura \texttt{dict}}};
+% Fotogramas clave muestreados
+\filldraw[blue!85!black] (0.25, 1.45) circle (3pt) node[below=3pt, font=\scriptsize\bfseries, blue!85!black] {$F_{\text{ini}}$ ($01\text{:}01$)};
+\filldraw[blue!85!black] (9.2, 1.45) circle (3pt) node[below=3pt, font=\scriptsize\bfseries, blue!85!black] {$F_{\text{entropía}}$ ($01\text{:}25$, Listas)};
+\filldraw[blue!85!black] (14.25, 1.45) circle (3pt) node[below=3pt, font=\scriptsize\bfseries, blue!85!black] {$F_{\text{fin}}$ ($01\text{:}40$)};
 
-\draw[fill=gray!12, draw=black!70, thick, rounded corners=2pt] (3.2, -0.8) rectangle (6.3, 0.05);
-\node[font=\tiny] at (4.75, -0.37) {Sub-Chunk 5b ($01\text{:}11\text{--}01\text{:}21$)};
+% Advertencia de pérdida
+\node[font=\tiny\bfseries, red!80!black, fill=white, draw=red!60!black, rounded corners=1pt, inner sep=2pt] at (2.1, 0.70) {¡Omisión por submuestreo! Ningún frame captura \texttt{dict}};
 
-\draw[fill=gray!12, draw=black!70, thick, rounded corners=2pt] (6.4, -0.8) rectangle (9.5, 0.05);
-\node[font=\tiny] at (7.95, -0.37) {Sub-Chunk 5c ($01\text{:}21\text{--}01\text{:}31$)};
+% Caso B: Corrección mediante división temporal
+\node[font=\scriptsize\bfseries, anchor=west] at (0, -0.05) {(b) Solución Arquitectónica: Corte Forzado por Duración Máxima (\texttt{max\_shot\_frames} $\approx 10\text{-}15\text{ s}$):};
 
-\draw[fill=gray!12, draw=black!70, thick, rounded corners=2pt] (9.6, -0.8) rectangle (12.6, 0.05);
-\node[font=\tiny] at (11.1, -0.37) {Sub-Chunk 5d ($01\text{:}31\text{--}01\text{:}40$)};
+\node[activebox] (b1) at (1.75, -0.9) {\textbf{Sub-Chunk 5a} ($10\text{ s}$)\\[1pt]{\scriptsize $01\text{:}01.1\text{ - }01\text{:}11.0$}\\[1pt]\textbf{\color{green!40!black} Captura \texttt{dict}}};
+\node[subbox] (b2) at (5.40, -0.9) {Sub-Chunk 5b ($10\text{ s}$)\\[1pt]{\scriptsize $01\text{:}11.0\text{ - }01\text{:}21.0$}\\[1pt]Listas};
+\node[subbox] (b3) at (9.05, -0.9) {Sub-Chunk 5c ($10\text{ s}$)\\[1pt]{\scriptsize $01\text{:}21.0\text{ - }01\text{:}31.0$}\\[1pt]Variables};
+\node[subbox] (b4) at (12.70, -0.9) {Sub-Chunk 5d ($9,2\text{ s}$)\\[1pt]{\scriptsize $01\text{:}31.0\text{ - }01\text{:}40.2$}\\[1pt]Condicionales};
 \end{tikzpicture}
-\caption{Mecanismo de dilución semántica y pérdida de fotogramas clave en vídeos con baja variación visual: (a) un fragmento de casi $40\text{ s}$ muestreado con solo $3$ fotogramas omite el instante en que aparece el diccionario y mezcla múltiples temas; (b) la imposición de un límite superior (\texttt{max\_shot\_frames} de $10\text{--}15\text{ s}$) o la extracción proporcional (un fotograma extra cada $5\text{ s}$) garantiza la cohesión semántica.} %[cite: 3]
+\caption{Mecanismo de dilución semántica y pérdida de fotogramas clave en vídeos con baja variación visual: (a) un fragmento de casi $40\text{ s}$ muestreado con solo $3$ fotogramas omite el instante en que aparece el diccionario y mezcla múltiples temas; (b) la imposición de un límite superior (\texttt{max\_shot\_frames} de $10\text{-}15\text{ s}$) o la extracción proporcional (un fotograma extra cada $5\text{ s}$) garantiza la cohesión semántica.} %[cite: 3]
 \label{fig:dilucion_semantica_chunks_largos}
 \end{figure}
 
@@ -223,19 +236,21 @@ El Cuadro~\ref{tab:diagnostico_parametros_visuales} resume la comparativa técni
 
 \begin{table}[htbp]
 \centering
+\small
+\setlength{\tabcolsep}{4.5pt}
 \caption{Diagnóstico empírico de parámetros de preprocesamiento visual y temporal en sistemas Video RAG con verificación secundaria (\textit{Gemini Embedding 2} + \textit{Gemini Flash}) \cite{gemini_emb2_docs}.} %[cite: 3]
 \label{tab:diagnostico_parametros_visuales}
-\begin{tabular}{llll}
-\hline
-\textbf{Parámetro del Pipeline} & \textbf{Config. Defectuosa} & \textbf{Efecto Patológico en el RAG} & \textbf{Configuración Óptima Calibrada} \\
-\hline
+\begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}p{3.4cm} >{\raggedright\arraybackslash}p{3.0cm} >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}p{4.6cm}}
+\toprule
+\textbf{Parámetro} & \textbf{Configuración Defectuosa} & \textbf{Efecto Patológico en el RAG} & \textbf{Configuración Calibrada} \\
+\midrule
 Ancho máx. (\texttt{resize\_width}) & $512\text{ px}$ & Texto/código ilegible (fallo OCR implícito) & $768\text{ px}$ a $1.280\text{ px}$ (nitidez tipográfica) \\
-Calidad JPEG (\texttt{jpeg\_quality}) & $12$ a $20$ & Artefactos de bloque borran la sintaxis & $50\text{--}70$ (equilibrio) o $80\text{--}90$ (alta) \\
-Umbral SSIM (\texttt{threshold}) & $0,08$ (o $0,60$ estático) & Chunks gigantes ($\sim 40\text{ s}$); dilución vectorial & $0,50\text{--}0,80$ + cota superior temporal \\
-Duración máx. (\texttt{max\_shot\_frames}) & Sin límite ($\infty$) & Pérdida de evento al extraer solo 3 frames & Corte forzado cada $10\text{--}15\text{ s}$ máx. \\
-Muestreo (\texttt{extract\_key\_frames}) & Fijo ($3$ frames/chunk) & Submuestreo severo en planos largos & $3$ frames (cortos) o $+1$ frame cada $5\text{ s}$ \\
-\hline
-\end{tabular}
+Calidad JPEG (\texttt{jpeg\_quality}) & $12$ a $20$ & Artefactos de bloque borran la sintaxis & $50\text{-}70$ (equilibrio) o $80\text{-}90$ (alta) \\
+Umbral SSIM (\texttt{threshold}) & $0,08$ (o $0,60$ estático) & Chunks gigantes ($\sim 40\text{ s}$); dilución vectorial & $0,50\text{-}0,80$ + cota superior temporal \\
+Duración máx. (\texttt{max\_shot\_frames}) & Sin límite ($\infty$) & Pérdida de evento al extraer solo 3 frames & Corte forzado cada $10\text{-}15\text{ s}$ máx. \\
+Muestreo (\texttt{extract\_key\_frames}) & Fijo ($3$ frames / chunk) & Submuestreo severo en planos largos & $3$ frames o $+1$ frame cada $5\text{ s}$ \\
+\bottomrule
+\end{tabularx}
 \end{table}
 
 Estos resultados demuestran que la eficacia de un modelo fundacional omnimodal no depende únicamente de su capacidad neuronal en la nube, sino de que la canalización local de visión por computador preserve la resolución tipográfica suficiente y acote la duración temporal de cada fragmento antes de la vectorización. %[cite: 3]

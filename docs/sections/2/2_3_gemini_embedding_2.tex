@@ -16,7 +16,7 @@ Esta unificación topológica implica que los vectores generados a partir de una
 De este modo, la localización de un evento específico dentro de un repositorio audiovisual prescinde por completo de etiquetas manuales previas o de traducciones intermedias a texto plano, resolviéndose mediante el cálculo directo de la similitud del coseno entre la consulta vectorizada y los fragmentos multimedia indexados \cite{gemini_emb2_docs}. %[cite: 3, 5]
 
 En cuanto a la configuración algebraica de sus tensores de salida, el modelo incorpora soporte nativo para \textit{Matryoshka Representation Learning} (MRL) a través del parámetro de configuración \texttt{output\_dimensionality} integrado en la estructura \texttt{types.EmbedContentConfig} del SDK oficial \texttt{google-genai} \cite{gemini_emb2_docs}. %[cite: 3, 4]
-Aunque cuando se invoca el punto de enlace sin parámetros adicionales para pruebas básicas de texto el sistema devuelve por defecto un vector compacto de $768$ dimensiones, la arquitectura permite solicitar representaciones de mayor densidad —destacando los estándares operativos de $768$, $1.536$ y el máximo nativo de $3.072$ dimensiones— \cite{gemini_emb2_docs}. %[cite: 3]
+Aunque cuando se invoca el punto de enlace sin parámetros adicionales para pruebas básicas de texto el sistema devuelve por defecto un vector compacto de $768$ dimensiones, la arquitectura permite solicitar representaciones de mayor densidad (destacando los estándares operativos de $768$, $1.536$ y el máximo nativo de $3.072$ dimensiones) \cite{gemini_emb2_docs}. %[cite: 3]
 
 Desde la perspectiva de la precisión numérica, existe una distinción crítica en el post-procesamiento de los vectores devueltos por la API según la dimensionalidad seleccionada \cite{gemini_emb2_docs}: %[cite: 3]
 \begin{itemize}
@@ -30,8 +30,8 @@ Desde la perspectiva de la precisión numérica, existe una distinción crítica
 
 La integración programática con el modelo \texttt{gemini-embedding-2-preview} a través de la librería oficial \texttt{google-genai} habilita dos arquitecturas de acoplamiento de datos claramente diferenciadas según la naturaleza del flujo de procesamiento \cite{gemini_emb2_docs, gemini_embeddings_general_docs}: %[cite: 3, 4]
 
-\paragraph{1. Ingestión de Archivos Completos mediante la API de Almacenamiento Temporal (\texttt{client.files.upload}):}
-Orientada al procesamiento directo de ficheros pesados almacenados en disco (clips de vídeo en formato \texttt{video/mp4}, pistas de audio, imágenes de alta resolución o documentos PDF) \cite{gemini_emb2_docs}. %[cite: 3]
+\paragraph{Ingestión de Archivos Completos mediante la API de Almacenamiento Temporal (\texttt{client.files.upload}):}
+Orientada al procesamiento directo de ficheros pesados almacenados en disco (clips de vídeo en formato \texttt{video/mp4}, pistas de audio, imágenes de alta resolución o documentos PDF) \cite{gemini_emb2_docs, gemini_embeddings_general_docs}: %[cite: 3]
 En este patrón arquitectónico, el sistema no envía los bytes crudos directamente en la llamada de inferencia, sino que ejecuta un protocolo en tres fases \cite{gemini_emb2_docs}: %[cite: 3]
 \begin{enumerate}
     \item \textit{Transferencia y generación de URI:} Se invoca el método \texttt{client.files.upload(file=file\_path, config=\{'mime\_type': mime\_type\})}, el cual aloja temporalmente el recurso multimedia en la infraestructura de Google AI Studio y devuelve un objeto con un identificador único (\texttt{uploaded\_file.name}) y una referencia uniforme (\texttt{uploaded\_file.uri}) \cite{gemini_emb2_docs}. %[cite: 3]
@@ -40,8 +40,8 @@ En este patrón arquitectónico, el sistema no envía los bytes crudos directame
     \item \textit{Extracción vectorial y limpieza:} Una vez activo el recurso, se pasa la referencia \texttt{uploaded\_file} al parámetro \texttt{contents} de \texttt{client.models.embed\_content}, pudiendo invocar posteriormente \texttt{client.files.delete(name=uploaded\_file.name)} para liberar el almacenamiento remoto \cite{gemini_emb2_docs}. %[cite: 3]
 \end{enumerate}
 
-\paragraph{2. Ingestión por Agregación de Fotogramas Clave en Memoria (\texttt{types.Content} y \texttt{types.Part.from\_bytes}):}
-Si bien la API Files resulta idónea para clips pre-cortados en disco, en una arquitectura de fragmentación semántica adaptativa como \textit{Video-RAC} —donde un vídeo largo se divide dinámicamente en memoria en decenas o cientos de objetos \texttt{VideoChunk} mediante OpenCV— escribir cada sub-clip en disco, subirlo a la API Files y esperar $2$ segundos de sondeo por cada fragmento introduciría una latencia de entrada/salida inasumible \cite{video_rac2025, gemini_emb2_docs}. %[cite: 3, 4]
+\paragraph{Ingestión por Agregación de Fotogramas Clave en Memoria (\texttt{types.Content} y \texttt{types.Part.from\_bytes}):}
+Si bien la API Files resulta idónea para clips pre-cortados en disco, en una arquitectura de fragmentación semántica adaptativa como \textit{Video-RAC} (donde un vídeo largo se divide dinámicamente en memoria en decenas o cientos de objetos \texttt{VideoChunk} mediante OpenCV) escribir cada sub-clip en disco, subirlo a la API Files y esperar $2$ segundos de sondeo por cada fragmento introduciría una latencia de entrada/salida inasumible \cite{video_rac2025, gemini_emb2_docs}. %[cite: 3, 4]
 
 Para optimizar el rendimiento y el consumo de ancho de banda, el diseño avanzado implementado en el motor de vectorización (\texttt{GeminiMultimodalVectorizer}) toma las matrices NumPy (\texttt{NDArray[np.uint8]} en espacio de color BGR) correspondientes a los tres fotogramas representativos extraídos de cada \texttt{VideoChunk} y los codifica directamente en memoria RAM al estándar JPEG mediante \texttt{cv2.imencode(".jpg", frame, [cv2.IMWRITE\_JPEG\_QUALITY, jpeg\_quality])} (con una calidad por defecto de $90$ sobre $100$) \cite{gemini_emb2_docs}. %[cite: 3]
 Cada búfer de bytes resultante se encapsula en un objeto \texttt{types.Part.from\_bytes(data=buffer.tobytes(), mime\_type="image/jpeg")} y la lista completa de partes del fragmento se empaqueta en una única instancia \texttt{types.Content(parts=parts)} que se transmite de forma asíncrona mediante \texttt{client.aio.models.embed\_content} \cite{gemini_emb2_docs}. %[cite: 3]
@@ -54,31 +54,31 @@ La Figura~\ref{fig:gemini_ingest_modes} ilustra y compara ambos flujos de acopla
 \centering
 \begin{tikzpicture}[
     node distance=0.5cm and 0.65cm,
-    box/.style={rectangle, draw=black!80, fill=gray!10, thick, minimum width=2.4cm, minimum height=0.85cm, align=center, font=\scriptsize, rounded corners=2pt},
-    cloudbox/.style={rectangle, draw=blue!80!black, fill=blue!8, thick, minimum width=2.6cm, minimum height=0.85cm, align=center, font=\scriptsize, rounded corners=2pt},
-    statebox/.style={rectangle, draw=orange!85!black, fill=orange!12, thick, minimum width=2.7cm, minimum height=0.85cm, align=center, font=\scriptsize\bfseries, rounded corners=2pt},
-    membox/.style={rectangle, draw=purple!80!black, fill=purple!8, thick, minimum width=2.6cm, minimum height=0.85cm, align=center, font=\scriptsize, rounded corners=2pt},
-    outbox/.style={rectangle, draw=green!60!black, fill=green!12, very thick, minimum width=2.5cm, minimum height=0.85cm, align=center, font=\scriptsize\bfseries, rounded corners=2pt},
+    box/.style={rectangle, draw=black!80, fill=gray!10, thick, minimum width=3.1cm, minimum height=0.90cm, align=center, font=\scriptsize, rounded corners=2pt},
+    cloudbox/.style={rectangle, draw=blue!80!black, fill=blue!8, thick, minimum width=3.2cm, minimum height=0.90cm, align=center, font=\scriptsize, rounded corners=2pt},
+    statebox/.style={rectangle, draw=orange!85!black, fill=orange!12, thick, minimum width=3.2cm, minimum height=0.90cm, align=center, font=\scriptsize\bfseries, rounded corners=2pt},
+    membox/.style={rectangle, draw=purple!80!black, fill=purple!8, thick, minimum width=3.2cm, minimum height=0.90cm, align=center, font=\scriptsize, rounded corners=2pt},
+    outbox/.style={rectangle, draw=green!60!black, fill=green!12, very thick, minimum width=2.8cm, minimum height=0.90cm, align=center, font=\scriptsize\bfseries, rounded corners=2pt},
     arrow/.style={-stealth, thick, draw=black!80}
 ]
 % Vía A: API Files
-\node[font=\bfseries\footnotesize, anchor=west] at (-6.5, 2.3) {(a) Vía 1: Ingestión de Archivo Pesado mediante API Files (Con Sondeo de Estado)};
-\node[box] (f_disk) at (-5.2, 1.3) {Archivo en Disco\\(\texttt{clip.mp4} / Audio)};
-\node[cloudbox] (f_up) at (-2.0, 1.3) {\texttt{client.files.upload}\\(Genera URI remoto)};
-\node[statebox] (f_poll) at (1.4, 1.3) {Sondeo \texttt{files.get}\\(\texttt{sleep(2s)} $\to$ \texttt{ACTIVE})};
-\node[outbox] (f_emb) at (4.8, 1.3) {\texttt{embed\_content}\\Vector $\mathbf{v} \in \mathbb{R}^d$};
+\node[font=\bfseries\footnotesize, anchor=west] at (-7.9, 3.35) {(a) Vía 1: Ingestión de Archivo Pesado mediante API Files (Con Sondeo de Estado)};
+\node[box] (f_disk) at (-6.35, 1.80) {Archivo en Disco\\[2pt](\texttt{clip.mp4} / Audio)};
+\node[cloudbox] (f_up) at (-2.03, 1.80) {\texttt{client.files.upload}\\[2pt](Genera URI remoto)};
+\node[statebox] (f_poll) at (2.34, 1.80) {Sondeo \texttt{files.get}\\[2pt](\texttt{sleep(2s)} $\to$ \texttt{ACTIVE})};
+\node[outbox] (f_emb) at (6.50, 1.80) {\texttt{embed\_content}\\[2pt]Vector $\mathbf{v} \in \mathbb{R}^d$};
 
 \draw[arrow] (f_disk) -- (f_up);
 \draw[arrow] (f_up) -- (f_poll);
 \draw[arrow] (f_poll) -- (f_emb);
-\draw[arrow, dashed, orange!85!black] (f_poll.north) .. controls (1.0, 2.05) and (1.8, 2.05) .. node[above, font=\tiny] {\texttt{ != ACTIVE}} (f_poll.north);
+\draw[arrow, dashed, orange!85!black] (f_poll.north) .. controls (1.9, 2.70) and (2.8, 2.70) .. node[above=1pt, font=\scriptsize\bfseries, text=orange!90!black] {\texttt{!= ACTIVE}} (f_poll.north);
 
 % Vía B: Agregación en Memoria
-\node[font=\bfseries\footnotesize, anchor=west] at (-6.5, -0.2) {(b) Vía 2: Agregación Asíncrona en Memoria RAM para \texttt{VideoChunk} (Sin Latencia de Disco)};
-\node[box] (m_cv) at (-5.2, -1.2) {3 Matrices OpenCV\\(\texttt{NDArray[uint8]} BGR)};
-\node[membox] (m_jpg) at (-2.0, -1.2) {\texttt{cv2.imencode(".jpg")}\\Calidad JPEG $= 90$};
-\node[membox] (m_part) at (1.4, -1.2) {\texttt{types.Content(parts)}\\(3 $\times$ \texttt{Part.from\_bytes})};
-\node[outbox] (m_emb) at (4.8, -1.2) {\texttt{aio.embed\_content}\\Vector Agregado $\mathbf{v}_c$};
+\node[font=\bfseries\footnotesize, anchor=west] at (-7.9, 0.40) {(b) Vía 2: Agregación Asíncrona en Memoria RAM para \texttt{VideoChunk} (Sin Latencia de Disco)};
+\node[box] (m_cv) at (-6.35, -0.70) {3 Matrices OpenCV\\[2pt](\texttt{NDArray[uint8]} BGR)};
+\node[membox] (m_jpg) at (-2.03, -0.70) {\texttt{cv2.imencode(".jpg")}\\[2pt]Calidad JPEG $= 90$};
+\node[membox] (m_part) at (2.34, -0.70) {\texttt{types.Content(parts)}\\[2pt](3 $\times$ \texttt{Part.from\_bytes})};
+\node[outbox] (m_emb) at (6.50, -0.70) {\texttt{aio.embed\_content}\\[2pt]Vector Agregado $\mathbf{v}_c$};
 
 \draw[arrow] (m_cv) -- (m_jpg);
 \draw[arrow] (m_jpg) -- (m_part);
@@ -104,7 +104,7 @@ En el entorno de experimentación y validación de Google AI Studio (capa gratui
 Un análisis superficial podría sugerir que el sistema es capaz de vectorizar $100$ fragmentos de vídeo (\texttt{VideoChunk}) por minuto atenidos al umbral de $\text{RPM}_{\max} = 100$. %[cite: 3]
 Sin embargo, el modelado riguroso de la carga útil multimedia demuestra que el verdadero cuello de botella por minuto reside en el consumo de \textit{tokens} ($\text{TPM}_{\max}$) \cite{gemini_emb2_docs}. %[cite: 3]
 Cada imagen o fotograma enviado a los modelos de la familia Gemini consume una tasa base de aproximadamente $T_{\text{img}} \approx 258\text{--}300$ \textit{tokens} \cite{gemini_emb2_docs}. %[cite: 3]
-Dado que el algoritmo de selección por entropía extrae $N_{\text{frames}} = 3$ fotogramas clave por cada \texttt{VideoChunk}, el coste en \textit{tokens} de una única petición de fragmento asciende a: %[cite: 3]
+Dado que el algoritmo de selección por entropía extrae $N_{\text{frames}} = 3$ fotogramas clave por cada \texttt{VideoChunk}, el coste en \textit{tokens} de una única petición de fragmento asciende según la Ecuación~\eqref{eq:tokens_por_chunk} a: %[cite: 3]
 
 \begin{equation}
 T_{\text{chunk}} = N_{\text{frames}} \times T_{\text{img}} \approx 3 \times 300 = 900 \text{ tokens/chunk}
@@ -112,7 +112,7 @@ T_{\text{chunk}} = N_{\text{frames}} \times T_{\text{img}} \approx 3 \times 300 
 \end{equation} %[cite: 3]
 
 Si el orquestador enviase el máximo permitido de $100$ peticiones en un minuto, la demanda de caudal ascendería a $100 \times 900 = 90.000$ \textit{tokens}/minuto, triplicando el límite de $\text{TPM}_{\max} = 30.000$ y provocando el rechazo inmediato de las peticiones con código de error HTTP \texttt{429 (Too Many Requests)}. %[cite: 3]
-En consecuencia, el caudal máximo efectivo sostenido ($\lambda_{\text{efectivo}}$) en fragmentos por minuto queda determinado por el mínimo entre la restricción de peticiones y la restricción de \textit{tokens}: %[cite: 3]
+En consecuencia, el caudal máximo efectivo sostenido ($\lambda_{\text{efectivo}}$) en fragmentos por minuto queda determinado según la Ecuación~\eqref{eq:caudal_efectivo_chunks} por el mínimo entre la restricción de peticiones y la restricción de \textit{tokens}: %[cite: 3]
 
 \begin{equation}
 \lambda_{\text{efectivo}} = \min\!\left(\text{RPM}_{\max}, \, \left\lfloor \frac{\text{TPM}_{\max}}{T_{\text{chunk}}} \right\rfloor\right) = \min\!\left(100, \, \left\lfloor \frac{30.000}{900} \right\rfloor\right) \approx 33 \text{ chunks/minuto}
@@ -123,7 +123,7 @@ Esto restringe la velocidad de ingestión real a un rango de entre $30$ y $35$ f
 
 De forma análoga, el límite diario de $\text{RPD}_{\max} = 1.000$ peticiones acota la duración máxima de vídeo que puede indexarse en una jornada de experimentación. %[cite: 3]
 Bajo una segmentación semántica adaptativa (\textit{Video-RAC}), un vídeo educativo o divulgativo promedio experimenta un cambio de plano cada $\bar{d}_{\text{plano}} \in [3, 7]$ segundos. %[cite: 3]
-Asumiendo una media conservadora de $\bar{d}_{\text{plano}} = 5$ segundos por fragmento, cada minuto de metraje produce $C_{\text{min}} = 60 / 5 = 12$ \textit{chunks}/minuto, lo que arroja un límite teórico absoluto de duración diaria ($D_{\max}$) de: %[cite: 3]
+Asumiendo una media conservadora de $\bar{d}_{\text{plano}} = 5$ segundos por fragmento, cada minuto de metraje produce $C_{\text{min}} = 60 / 5 = 12$ \textit{chunks}/minuto, lo que arroja un límite teórico absoluto de duración diaria ($D_{\max}$) formulado en la Ecuación~\eqref{eq:duracion_maxima_diaria}: %[cite: 3]
 
 \begin{equation}
 D_{\max} = \frac{\text{RPD}_{\max}}{C_{\text{min}}} = \frac{1.000 \text{ chunks/día}}{12 \text{ chunks/minuto}} \approx 83,3 \text{ minutos/día}
@@ -139,30 +139,30 @@ La Figura~\ref{fig:cuello_botella_tpm_rpd} esquematiza la interacción entre los
 \centering
 \begin{tikzpicture}[
     node distance=0.5cm and 0.7cm,
-    innode/.style={rectangle, draw=black!80, fill=gray!10, thick, minimum width=2.8cm, minimum height=1.1cm, align=center, font=\scriptsize, rounded corners=2pt},
-    guardnode/.style={diamond, aspect=2.1, draw=red!80!black, fill=red!8, very thick, minimum width=2.8cm, minimum height=1.2cm, align=center, font=\scriptsize\bfseries},
-    limitbox/.style={rectangle, draw=blue!80!black, fill=blue!8, thick, minimum width=3.6cm, minimum height=1.8cm, align=center, font=\scriptsize, rounded corners=3pt},
-    abortbox/.style={rectangle, draw=red!80!black, fill=red!12, very thick, minimum width=3.1cm, minimum height=0.9cm, align=center, font=\scriptsize\bfseries, rounded corners=2pt},
-    okbox/.style={rectangle, draw=green!60!black, fill=green!12, very thick, minimum width=3.1cm, minimum height=1.2cm, align=center, font=\scriptsize\bfseries, rounded corners=2pt},
+    innode/.style={rectangle, draw=black!80, fill=gray!10, thick, minimum width=3.0cm, minimum height=1.2cm, align=center, font=\scriptsize, rounded corners=2pt},
+    guardnode/.style={diamond, aspect=2.0, draw=red!80!black, fill=red!8, very thick, minimum width=2.8cm, minimum height=1.3cm, align=center, font=\scriptsize\bfseries},
+    limitbox/.style={rectangle, draw=blue!80!black, fill=blue!8, thick, minimum width=4.0cm, minimum height=1.9cm, align=center, font=\scriptsize, rounded corners=3pt},
+    abortbox/.style={rectangle, draw=red!80!black, fill=red!12, very thick, minimum width=3.2cm, minimum height=1.0cm, align=center, font=\scriptsize\bfseries, rounded corners=2pt},
+    okbox/.style={rectangle, draw=green!60!black, fill=green!12, very thick, minimum width=4.0cm, minimum height=1.3cm, align=center, font=\scriptsize\bfseries, rounded corners=2pt},
     arrow/.style={-stealth, thick, draw=black!80}
 ]
-\node[innode] (vid) at (-5.2, 0.0) {Vídeo Segmentado\\$N$ \texttt{VideoChunks}\\($\sim 12$ chunks/min)};
+\node[innode] (vid) at (-5.1, 0.0) {\textbf{Vídeo Segmentado}\\[2pt]$N$ \texttt{VideoChunks}\\($\sim 12$ chunks/min)};
 
-\node[guardnode] (guard) at (-1.5, 0.0) {¿$N > 800$?\\(\texttt{MAX\_CHUNKS})};
+\node[guardnode] (guard) at (-1.0, 0.0) {¿$N > 800$?\\(\texttt{MAX\_CHUNKS})};
 
-\node[abortbox] (abort) at (-1.5, 2.0) {\texttt{QuotaSafetyError}\\Aborta sin gastar API\\(Protege 1.000 RPD)};
+\node[abortbox] (abort) at (-1.0, 2.1) {\texttt{QuotaSafetyError}\\[2pt]Aborta sin gastar API\\(Protege 1.000 RPD)};
 
-\node[limitbox] (tpm) at (2.8, 0.0) {\textbf{Control de Caudal API}\\
-$\bullet$ $\text{RPM}_{\max} = 100$ pet/min\\
-$\bullet$ $\text{TPM}_{\max} = 30.000$ tok/min\\
-$\bullet$ Coste $\approx 900$ tok/chunk\\
+\node[limitbox] (tpm) at (4.5, 0.0) {\textbf{Control de Caudal API}\\[2pt]
+$\bullet$ $\text{RPM}_{\max} = 100$ pet/min\\[1pt]
+$\bullet$ $\text{TPM}_{\max} = 30.000$ tok/min\\[1pt]
+$\bullet$ Coste $\approx 900$ tok/chunk\\[2pt]
 \textbf{Techo real: $\sim 33$ chunks/min}};
 
-\node[okbox] (out) at (2.8, -2.1) {Ingestión Controlada\\Clips 5--15 min (100--200 chunks)\\Consumo: 10\%--20\% RPD};
+\node[okbox] (out) at (4.5, -2.35) {\textbf{Ingestión Controlada}\\[2pt]Clips 5-15 min (100-200 chunks)\\[1pt]Consumo: 10\%-20\% RPD};
 
 \draw[arrow] (vid) -- (guard);
-\draw[arrow, draw=red!80!black] (guard) -- node[right, font=\scriptsize\bfseries, red!80!black] {Sí} (abort);
-\draw[arrow, draw=green!60!black] (guard) -- node[above, font=\scriptsize\bfseries, green!60!black] {No ($\le 800$)} (tpm);
+\draw[arrow, draw=red!80!black] (guard) -- node[right=3pt, font=\scriptsize\bfseries, text=red!80!black] {Sí} (abort);
+\draw[arrow, draw=green!50!black] (guard) -- node[above=2pt, font=\scriptsize\bfseries, text=green!50!black] {No ($\le 800$)} (tpm);
 \draw[arrow] (tpm) -- (out);
 \end{tikzpicture}
 \caption{Modelado de capacidad y cortafuegos de cuota para \texttt{gemini-embedding-2-preview}: la validación previa aborta ejecuciones que superen los $800$ fragmentos para proteger el límite diario (1.000 RPD), mientras que la densidad de $\sim 900$ \textit{tokens} por fragmento fija el caudal efectivo en $\sim 33$ \textit{chunks}/minuto bajo el techo de 30.000 TPM \cite{gemini_emb2_docs}.} %[cite: 3]
@@ -178,10 +178,10 @@ En primer lugar, las funciones síncronas bloqueantes de visión por computador 
 En segundo lugar, la emisión paralela de tareas de vectorización en \texttt{asyncio.gather} se regula mediante un semáforo asíncrono (\texttt{asyncio.Semaphore(max\_concurrent\_requests)}) calibrado específicamente en \texttt{max\_concurrent\_requests = 3} (reducido respecto a un valor inicial de $5$) para impedir ráfagas instantáneas que desborden las cuotas por minuto. %[cite: 3]
 
 Pese al uso del semáforo, dado que la latencia de respuesta de una petición individual es inferior a un segundo, tres corrutinas concurrentes pueden alcanzar el techo de $30.000$ \textit{tokens} antes de que se cumpla el minuto natural, recibiendo un error transitorio HTTP \texttt{429}. %[cite: 3]
-Para absorber este fenómeno sin perder datos —así como fallos transitorios de servidor catalogados en el conjunto inmutable \texttt{\_RETRYABLE\_CODES = \{429, 500, 502, 503, 504\}} y errores de red \texttt{OSError}/\texttt{TimeoutError}—, el método privado \texttt{\_embed} implementa un algoritmo de \textbf{reintento con espera exponencial (\textit{Exponential Backoff})}. %[cite: 3]
+Para absorber este fenómeno sin perder datos (así como fallos transitorios de servidor catalogados en el conjunto inmutable \texttt{\_RETRYABLE\_CODES = \{429, 500, 502, 503, 504\}} y errores de red \texttt{OSError}/\texttt{TimeoutError}), el método privado \texttt{\_embed} implementa un algoritmo de \textbf{reintento con espera exponencial (\textit{Exponential Backoff})}. %[cite: 3]
 
 La calibración matemática de los parámetros de este \textit{backoff} resulta determinante: si se utilizase una espera base de $t_0 = 2,0\text{ s}$ con $R = 3$ reintentos, la suma de las pausas sería únicamente de $2 + 4 + 8 + 16 = 28\text{ s}$ (o $2+4+8 = 14\text{ s}$ en tres esperas), tiempo insuficiente para que Google reinicie la ventana deslizante de $60$ segundos del límite TPM. %[cite: 3]
-Por el contrario, al incrementar los parámetros por defecto a un retardo base de \texttt{retry\_base\_delay} $= 4,0\text{ s}$ y un máximo de \texttt{max\_retries} $= 4$ reintentos, el tiempo de espera en el intento $k \in \{0, 1, 2, 3\}$ responde a $\Delta t_k = 4,0 \times 2^k$, generando una ventana acumulada exacta de un minuto: %[cite: 3]
+Por el contrario, al incrementar los parámetros por defecto a un retardo base de \texttt{retry\_base\_delay} $= 4,0\text{ s}$ y un máximo de \texttt{max\_retries} $= 4$ reintentos, el tiempo de espera en el intento $k \in \{0, 1, 2, 3\}$ responde a $\Delta t_k = 4,0 \times 2^k$, generando una ventana acumulada calculada según la Ecuación~\eqref{eq:suma_backoff_60s}: %[cite: 3]
 
 \begin{equation}
 T_{\text{espera total}} = \sum_{k=0}^{3} t_0 \cdot 2^k = 4,0 \times (2^0 + 2^1 + 2^2 + 2^3) = 4 + 8 + 16 + 32 = 60 \text{ segundos}
@@ -192,9 +192,9 @@ La Figura~\ref{fig:backoff_ventana_60s} muestra cómo esta progresión geométri
 
 \begin{figure}[htbp]
 \centering
-\begin{tikzpicture}[scale=0.95]
+\begin{tikzpicture}
 % Línea base de tiempo (0 a 60 segundos)
-\draw[-stealth, very thick, black!80] (0,0) -- (13.0,0) node[right, font=\scriptsize\bfseries] {Tiempo ($s$)};
+\draw[-stealth, very thick, black!80] (0,0) -- (13.2,0) node[right, font=\scriptsize\bfseries] {Tiempo ($s$)};
 
 % Marcas de tiempo proporcionales (escala: 1 seg = 0.2 unidades -> 60s = 12.0 unidades)
 \foreach \x/\t in {0/0s, 0.8/4s, 2.4/12s, 5.6/28s, 12.0/60s} {
@@ -204,7 +204,7 @@ La Figura~\ref{fig:backoff_ventana_60s} muestra cómo esta progresión geométri
 
 % Bloques de espera exponencial
 \draw[fill=blue!12, draw=blue!80!black, thick] (0, 0.25) rectangle (0.8, 1.05);
-\node[font=\tiny\bfseries, blue!90!black] at (0.4, 0.65) {4s};
+\node[font=\scriptsize\bfseries, blue!90!black] at (0.4, 0.65) {4s};
 
 \draw[fill=blue!22, draw=blue!80!black, thick] (0.8, 0.25) rectangle (2.4, 1.05);
 \node[font=\scriptsize\bfseries, blue!90!black] at (1.6, 0.65) {+8s ($4\cdot 2^1$)};
@@ -216,11 +216,15 @@ La Figura~\ref{fig:backoff_ventana_60s} muestra cómo esta progresión geométri
 \node[font=\scriptsize\bfseries, white] at (8.8, 0.65) {+32s ($4\cdot 2^3$) $\longrightarrow$ Suma Acumulada $= 60\text{ s}$};
 
 % Eventos de fallo e intento exitoso
-\node[above, font=\tiny\bfseries, red!80!black, align=center] at (0, 1.1) {Fallo Inicial\\HTTP 429};
-\node[above, font=\tiny, red!80!black] at (0.8, 1.1) {Reint. 1};
-\node[above, font=\tiny, red!80!black] at (2.4, 1.1) {Reint. 2};
-\node[above, font=\tiny, red!80!black] at (5.6, 1.1) {Reint. 3};
-\node[above, font=\tiny\bfseries, green!60!black, align=center] at (12.0, 1.1) {Reint. 4 (Éxito)\\Cuota TPM Limpia};
+\node[draw=red!80!black, fill=red!8, thick, rounded corners=2pt, font=\scriptsize\bfseries, text=red!80!black, align=center] (fail0) at (0.0, 2.05) {Fallo Inicial\\[-1pt]HTTP 429};
+\draw[-stealth, thick, red!80!black] (fail0.south) -- (0.0, 1.10);
+
+\node[above=2pt, font=\scriptsize\bfseries, text=red!80!black] at (0.8, 1.05) {Reint. 1};
+\node[above=2pt, font=\scriptsize\bfseries, text=red!80!black] at (2.4, 1.05) {Reint. 2};
+\node[above=2pt, font=\scriptsize\bfseries, text=red!80!black] at (5.6, 1.05) {Reint. 3};
+
+\node[draw=green!60!black, fill=green!8, thick, rounded corners=2pt, font=\scriptsize\bfseries, text=green!50!black, align=center] (succ) at (12.0, 2.05) {Reint. 4 (Éxito)\\[-1pt]Cuota TPM Limpia};
+\draw[-stealth, thick, green!60!black] (succ.south) -- (12.0, 1.10);
 
 % Llave inferior de ventana de 1 minuto
 \draw[decorate, decoration={brace, amplitude=6pt, mirror}, thick, purple!80!black] (0, -0.75) -- (12.0, -0.75) node[midway, below=7pt, font=\scriptsize\bfseries, purple!80!black] {Ventana completa de renovación de límite de tasa por minuto ($4 + 8 + 16 + 32 = 60\text{ s}$)};
@@ -243,29 +247,29 @@ La Figura~\ref{fig:degradacion_elegante_503} representa este flujo de continuida
 \centering
 \begin{tikzpicture}[
     node distance=0.5cm and 0.65cm,
-    proc/.style={rectangle, draw=blue!80!black, fill=blue!8, thick, minimum width=2.8cm, minimum height=1.0cm, align=center, font=\scriptsize, rounded corners=2pt},
-    dec/.style={diamond, aspect=2.0, draw=orange!85!black, fill=orange!10, thick, minimum width=2.5cm, minimum height=1.0cm, align=center, font=\scriptsize\bfseries},
-    warn/.style={rectangle, draw=purple!80!black, fill=purple!10, thick, minimum width=3.2cm, minimum height=1.0cm, align=center, font=\scriptsize, rounded corners=2pt},
-    ok/.style={rectangle, draw=green!60!black, fill=green!12, very thick, minimum width=3.1cm, minimum height=1.0cm, align=center, font=\scriptsize\bfseries, rounded corners=2pt},
+    proc/.style={rectangle, draw=blue!80!black, fill=blue!8, thick, minimum width=3.1cm, minimum height=1.1cm, align=center, font=\scriptsize, rounded corners=2pt},
+    dec/.style={diamond, aspect=1.9, draw=orange!85!black, fill=orange!10, thick, minimum width=2.3cm, minimum height=1.2cm, align=center, font=\scriptsize\bfseries},
+    warn/.style={rectangle, draw=purple!80!black, fill=purple!10, thick, minimum width=3.2cm, minimum height=1.2cm, align=center, font=\scriptsize, rounded corners=2pt},
+    ok/.style={rectangle, draw=green!60!black, fill=green!12, very thick, minimum width=3.2cm, minimum height=1.2cm, align=center, font=\scriptsize, rounded corners=2pt},
     arrow/.style={-stealth, thick, draw=black!80}
 ]
-\node[proc] (qdrant) at (-5.1, 0.0) {1.ª Etapa: Qdrant\\Recupera Top-$K$ por\\Similitud Coseno};
+\node[proc] (qdrant) at (-6.25, 0.0) {\textbf{1.ª Etapa: Qdrant}\\[2pt]Recupera Top-$K$ por\\Similitud Coseno};
 
-\node[proc] (rerank) at (-1.5, 0.0) {2.ª Etapa: Verificador\\(\texttt{gemini-3.5-flash-lite})\\+ Backoff Exponencial};
+\node[proc] (rerank) at (-1.95, 0.0) {\textbf{2.ª Etapa: Verificador}\\[2pt]{\scriptsize \texttt{gemini-3.5-flash-lite}}\\[1pt]+ Backoff Exponencial};
 
-\node[dec] (status) at (2.1, 0.0) {¿HTTP 503\\Persiste?};
+\node[dec] (status) at (1.90, 0.0) {¿HTTP 503\\Persiste?};
 
-\node[warn] (fallback) at (2.1, 1.9) {\textbf{Degradación Elegante}\\Log: ``Reordenación no disp.''\\Omite filtro secundario};
+\node[warn] (fallback) at (1.90, 2.1) {\textbf{Degradación Elegante}\\[2pt]Log: \textit{Fallo 503 VLM}\\[1pt]Omite filtro secundario};
 
-\node[ok] (out_rerank) at (5.7, 0.0) {Resultados Top-$K$\\Reordenados Visualmente};
+\node[ok] (out_rerank) at (6.20, 0.0) {\textbf{Resultados Top-}$K$\\[2pt]Reordenados por VLM\\(Máxima precisión)};
 
-\node[ok, draw=teal!80!black, fill=teal!12] (out_vec) at (5.7, 1.9) {Resultados Top-$K$\\Conservando Orden Vectorial};
+\node[ok, draw=teal!80!black, fill=teal!12] (out_vec) at (6.20, 2.1) {\textbf{Resultados Top-}$K$\\[2pt]Orden Vectorial Original\\(Preserva ranking Qdrant)};
 
 \draw[arrow] (qdrant) -- (rerank);
 \draw[arrow] (rerank) -- (status);
-\draw[arrow, draw=red!80!black] (status) -- node[right, font=\scriptsize\bfseries, red!80!black] {Sí (503)} (fallback);
-\draw[arrow, draw=green!60!black] (status) -- node[above, font=\scriptsize\bfseries, green!60!black] {No (200 OK)} (out_rerank);
-\draw[arrow, thick, draw=purple!80!black] (fallback) -- (out_vec);
+\draw[arrow, draw=red!80!black] (status) -- node[right=3pt, font=\scriptsize\bfseries, text=red!80!black] {Sí (503)} (fallback);
+\draw[arrow, draw=green!50!black] (status) -- node[above=2pt, font=\scriptsize\bfseries, text=green!50!black] {No (200 OK)} (out_rerank);
+\draw[arrow, draw=purple!80!black] (fallback) -- (out_vec);
 \end{tikzpicture}
 \caption{Arquitectura de Degradación Elegante (\textit{Graceful Degradation}) durante la búsqueda: si los servidores del modelo secundario (\texttt{gemini-3.5-flash-lite}) sufren picos de saturación (\texttt{503 UNAVAILABLE}) tras agotar los reintentos, el sistema conmuta limpiamente al orden de similitud vectorial calculado por Qdrant con \textit{Gemini Embedding 2}.} %[cite: 3]
 \label{fig:degradacion_elegante_503}
@@ -275,19 +279,20 @@ El Cuadro~\ref{tab:parametros_gemini_vectorizer} sintetiza los parámetros defin
 
 \begin{table}[htbp]
 \centering
+\small
 \caption{Parámetros técnicos calibrados en los módulos de vectorización y orquestación para operar con \texttt{gemini-embedding-2-preview} sin colapsos de cuota \cite{gemini_emb2_docs}.} %[cite: 3]
 \label{tab:parametros_gemini_vectorizer}
-\begin{tabular}{llll}
-\hline
-\textbf{Parámetro de Configuración} & \textbf{Módulo de Software} & \textbf{Valor Calibrado} & \textbf{Justificación Técnica / Impacto MLOps} \\
-\hline
-\texttt{model} & \texttt{gemini\_vectorizer.py} & \texttt{gemini-embedding-2-preview} & Modelo omnimodal nativo (espacio compartido) \\
-\texttt{output\_dimensionality} & \texttt{gemini\_vectorizer.py} & $3.072$ (o $768$ + L2) & Máxima resolución semántica (\texttt{VECTOR\_SIZE}) \\
-\texttt{jpeg\_quality} & \texttt{gemini\_vectorizer.py} & $90$ (escala $1\text{--}100$) & Alta fidelidad visual en memoria sin artefactos \\
-\texttt{max\_concurrent\_requests} & \texttt{pipeline.py} / \texttt{main.py} & $3$ (reducido desde $5$) & Limita peticiones simultáneas en \texttt{Semaphore} \\
+\begin{tabularx}{\linewidth}{p{4.2cm}p{3.2cm}p{2.6cm}X}
+\toprule
+\textbf{Parámetro} & \textbf{Módulo} & \textbf{Valor} & \textbf{Justificación Técnica / MLOps} \\
+\midrule
+\texttt{model} & \texttt{gemini\_vectorizer.py} & \texttt{gemini-embedding-2} & Modelo omnimodal nativo (espacio compartido) \\
+\texttt{output\_dimensionality} & \texttt{gemini\_vectorizer.py} & $3.072$ (o $768$ + $L_2$) & Máxima resolución semántica (\texttt{VECTOR\_SIZE}) \\
+\texttt{jpeg\_quality} & \texttt{gemini\_vectorizer.py} & $90$ (escala $1\text{-}100$) & Alta fidelidad visual en RAM sin artefactos \\
+\texttt{max\_concurrent\_requests} & \texttt{pipeline.py} & $3$ (reducido de $5$) & Limita peticiones concurrentes en semáforo \\
 \texttt{retry\_base\_delay} & \texttt{gemini\_vectorizer.py} & $4,0\text{ s}$ (antes $2,0\text{ s}$) & Base geométrica para cubrir ventana TPM \\
-\texttt{max\_retries} & \texttt{gemini\_vectorizer.py} & $4$ (antes $3$) & Suma $4+8+16+32 = 60\text{ s}$ ante HTTP 429/503 \\
-\texttt{MAX\_CHUNKS\_PER\_VIDEO} & \texttt{pipeline.py} & $800$ chunks & Cortafuegos \texttt{QuotaSafetyError} (protege 1.000 RPD) \\
-\hline
-\end{tabular}
+\texttt{max\_retries} & \texttt{gemini\_vectorizer.py} & $4$ (antes $3$) & Suma $4+8+16+32 = 60\text{ s}$ ante error HTTP \\
+\texttt{MAX\_CHUNKS\_PER\_VIDEO} & \texttt{pipeline.py} & $800$ fragmentos & Cortafuegos \texttt{QuotaSafetyError} (protege RPD) \\
+\bottomrule
+\end{tabularx}
 \end{table}
