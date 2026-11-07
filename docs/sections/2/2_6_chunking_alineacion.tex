@@ -309,3 +309,94 @@ Alineación y diarización & Whisper + WhisperX / MFA & Precisión milisegundos 
 \bottomrule
 \end{tabularx}
 \end{table}
+
+\subsubsection{Análisis Comparativo frente a Sistemas de Ingestión de Vídeo en Ventana Fija (\textit{SentrySearch})}
+\label{subsubsec:comparativa_sentrysearch_videorac}
+
+En el ecosistema actual de herramientas de código abierto para la búsqueda semántica sobre vídeo mediante \textit{Gemini Embedding 2} y \textit{Qwen3-VL-Embedding} \cite{gemini_emb2_docs, qwen3_vl_emb2026}, proyectos recientes como \textbf{\textit{SentrySearch}} \cite{sentrysearch2026} representan el enfoque de partición temporal rígida con ingestión directa de flujo de vídeo. %
+Dicha arquitectura divide los archivos multimedia en fragmentos de duración fija ($\Delta T = 30\text{ s}$) con un solapamiento estático ($\Delta t_{\text{overlap}} = 5\text{ s}$), reduciendo la resolución a $480\text{p}$ y $5\text{ FPS}$ antes de transmitir el clip de vídeo a la API en la nube o al modelo local \cite{sentrysearch2026}. %
+
+El contraste arquitectónico y matemático entre este enfoque de ventana fija y la canalización adaptativa implementada en el presente Trabajo de Fin de Máster (\textbf{SSIM + Entropía de Shannon + Transcripción Alineada}) permite cuantificar cuatro ventajas estructurales de nuestra propuesta \cite{video_rac2025, sentrysearch2026}: %[cite: 1, 2, 3]
+
+\begin{enumerate}
+    \item \textbf{Reducción superior al $90\%$ en facturación de fotogramas y consumo de cuota (\textit{Token Economy}):}
+    La API de \textit{Gemini Embedding 2} extrae, tokeniza y factura nativamente $1$ fotograma por cada segundo de vídeo subido ($1\text{ FPS}$), con independencia de la tasa de fotogramas del archivo contenedor \cite{sentrysearch2026}. %[cite: 2]
+    Al dividir $1$ hora de vídeo ($3.600\text{ s}$) en fragmentos de $30\text{ s}$ con $5\text{ s}$ de solapamiento, un sistema de ventana fija genera $144$ fragmentos y transmite un total de $4.315$ fotogramas facturados por hora (dado que los segundos solapados se pagan por duplicado en cada fragmento adyacente) \cite{sentrysearch2026}. %[cite: 2]
+    A una tarifa de referencia de $\$0,00079$ por fotograma de vídeo procesado (equivalente a $\$12,00$ por millón de tokens de vídeo frente a $\$0,45$ por millón de tokens de imagen estática), la ingestión bruta asciende a $\approx \$3,41$ por hora de metraje \cite{sentrysearch2026, gemini_emb2_docs}. %[cite: 2]
+    Por el contrario, nuestra arquitectura fundamentada en \textit{Video-RAC} \cite{video_rac2025} evita subir el flujo continuo de vídeo y empaqueta únicamente $k = 3$ fotogramas clave por fragmento (inicial, final y máxima entropía de Shannon) junto con la transcripción fonética dentro de una única estructura \texttt{types.Content}. %[cite: 1, 2]
+    Para una media de $144$ fragmentos adaptativos por hora, el sistema procesa únicamente $144 \times 3 = 432$ imágenes en lugar de $4.315$ fotogramas de vídeo, logrando una reducción del $\mathbf{89,98\%}$ en el volumen visual procesado y manteniendo el consumo dentro de los límites estrictos de la capa gratuita ($30.000\text{ TPM}$ y $1.000\text{ RPD}$). %[cite: 1, 2]
+
+    \item \textbf{Superación de las limitaciones de borde temporal y detección heurística de estaticidad:}
+    La propia documentación técnica de \textit{SentrySearch} reconoce como limitaciones abiertas que: (a) la calidad de recuperación se degrada cuando un evento queda dividido entre dos fragmentos fijos, proponiendo como ``trabajo futuro'' la incorporación de detección inteligente de escenas; y (b) su descarte de fragmentos estáticos depende de una heurística simple que compara el tamaño en bytes de archivos JPEG muestreados, la cual omite movimientos sutiles \cite{sentrysearch2026}. %[cite: 1, 2]
+    Nuestro \textit{pipeline} resuelve nativamente ambos problemas mediante la detección de límites de plano basada en el Índice de Similitud Estructural con filtro Gaussiano $7 \times 7$ ($\sigma = 1,5$) sobre OpenCV (\texttt{detect\_shot\_boundaries}) y el cálculo exacto de la densidad de información mediante la Entropía de Shannon sobre el histograma de intensidades (\texttt{cv2.calcHist}), acotado por \texttt{max\_shot\_frames} para impedir la dilución semántica en planos estáticos de programación \cite{video_rac2025}. %[cite: 1, 2]
+
+    \item \textbf{Explicación teórica y empírica de la distribución de similitud del coseno en consultas específicas:}
+    Los estudios sobre \textit{Gemini Embedding 2} y \textit{Qwen3-VL-Embedding} prueban que las consultas de alta especificidad visual o sintáctica producen puntuaciones de similitud del coseno inferiores al umbral genérico de $0,41$ (rango verificado $0,28\text{--}0,39$) \cite{sentrysearch2026}. %[cite: 1, 2]
+    Esto fundamenta lo observado en la validación sobre \texttt{python\_tutorial.mp4} para la consulta \texttt{"Bucles while"}: una portada gráfica con el título \textit{``Bucles''} alcanza similitud $\mathbf{0,4315}$ (\texttt{Chunk 36}, Rango \#1), mientras que el fragmento con código real (\texttt{while index < 5:} en $t = 231,0\text{ s}$, \texttt{Chunk 38}) obtiene $\mathbf{0,3893}$ (Rango \#7). %
+
+    \newpage
+    \item \textbf{Necesidad de deduplicación inter-chunk (\textit{Deduplication}) y sobremuestreo antes del \textit{Reranking}:}
+    En secuencias de baja variación visual, fragmentos contiguos acaparan las primeras posiciones vectoriales (como los \texttt{Chunks 36, 35 y 33} con $0,4315$, $0,4219$ y $0,4211$), desplazando al fragmento objetivo fuera de un corte \texttt{top\_k = 5}. %[cite: 1]
+    Combinar un sobremuestreo (\texttt{fetch\_k} $> \text{top\_k}$) con un filtro de techo de similitud ($\tau_{\text{dedupe}} \approx 0,90\text{--}0,95$) garantiza diversidad topológica hacia la segunda etapa (\textit{Gemini 3.5 Flash Lite}), preservando degradación elegante (\textit{fallback}) hacia Qdrant ante saturaciones transitorias de red \cite{sentrysearch2026}. %[cite: 1, 2, 4]
+\end{enumerate}
+
+La Figura~\ref{fig:comparativa_sentrysearch_vs_tfm} ilustra la diferencia estructural y de eficiencia de tokens entre un pipeline de ventana fija a $1\text{ FPS}$ y la arquitectura adaptativa multimodal desarrollada en este trabajo. %[cite: 1, 2]
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    pipebox/.style={rectangle, draw=black!70, fill=gray!6, thick, minimum width=15.4cm, minimum height=2.0cm, rounded corners=4pt},
+    badnode/.style={rectangle, draw=red!75!black, fill=red!7, thick, text width=2.9cm, minimum height=1.25cm, align=center, font=\scriptsize, rounded corners=2pt},
+    goodnode/.style={rectangle, draw=green!60!black, fill=green!8, thick, text width=2.9cm, minimum height=1.25cm, align=center, font=\scriptsize, rounded corners=2pt},
+    costbad/.style={rectangle, draw=red!85!black, fill=red!16, very thick, text width=3.1cm, minimum height=1.25cm, align=center, font=\scriptsize\bfseries, rounded corners=2pt},
+    costgood/.style={rectangle, draw=green!60!black, fill=green!16, very thick, text width=3.1cm, minimum height=1.25cm, align=center, font=\scriptsize\bfseries, rounded corners=2pt},
+    arrow/.style={-stealth, thick, draw=black!75}
+]
+% Rama A: SentrySearch (Ventana fija + Vídeo bruto 1 FPS)
+\node[pipebox] (p1) at (0, 2.4) {};
+\node[font=\scriptsize\bfseries, anchor=north west, red!80!black] at (-7.4, 3.3) {(a) Enfoque de Ventana Fija e Ingestión de Vídeo Bruto (ej. \textit{SentrySearch}):};
+\node[badnode] (s1) at (-5.7, 2.15) {Partición Fija\\Ventana $30\text{ s}$\\Solapamiento $5\text{ s}$};
+\node[badnode] (s2) at (-1.9, 2.15) {Filtro Heurístico\\Tamaño bytes JPEG\\(Falla en código/texto)};
+\node[badnode] (s3) at (1.9, 2.15) {Subida Clip MP4\\Tokenización API a\\$\mathbf{1\text{ FPS}}$ ($30$ frames/clip)};
+\node[costbad] (s4) at (5.7, 2.15) {Coste / Hora ($144$ clips):\\$\mathbf{4.315\text{ frames}}$\\$\approx \mathbf{\$3{,}41\text{ / hora}}$};
+\draw[arrow] (s1) -- (s2);
+\draw[arrow] (s2) -- (s3);
+\draw[arrow, red!80!black, very thick] (s3) -- (s4);
+
+% Rama B: Arquitectura TFM (Video-RAC SSIM + Entropía + Transcripción + Dedupe)
+\node[pipebox] (p2) at (0, 0.0) {};
+\node[font=\scriptsize\bfseries, anchor=north west, green!50!black] at (-7.4, 0.9) {(b) Arquitectura Propuesta en el TFM (\textit{Video-RAC} Adaptativo + Entropía + Audio Alineado):};
+\node[goodnode] (t1) at (-5.7, -0.25) {Segmentación SSIM\\Gaussiana + Cota\\(\texttt{max\_shot\_frames})};
+\node[goodnode] (t2) at (-1.9, -0.25) {Muestreo Entropía\\Exactamente $\mathbf{3\text{ frames}}$\\($F_{\text{ini}}, F_{\text{ent}}, F_{\text{fin}}$)};
+\node[goodnode] (t3) at (1.9, -0.25) {Fusión \texttt{Content}\\$3$ JPEGs + Audio\\Transcrito (\textit{Whisper})};
+\node[costgood] (t4) at (5.7, -0.25) {Coste / Hora ($144$ clips):\\$\mathbf{432\text{ frames}}$ ($\mathbf{-90\%}$)\\Apto Free Tier + Rerank};
+\draw[arrow] (t1) -- (t2);
+\draw[arrow] (t2) -- (t3);
+\draw[arrow, green!60!black, very thick] (t3) -- (t4);
+\end{tikzpicture}
+\caption{Comparativa arquitectónica y de eficiencia computacional entre la ingestión de vídeo bruto en ventanas fijas a $1\text{ FPS}$ (\textit{SentrySearch}) y la canalización adaptativa multimodal por entropía de Shannon propuesta en el TFM \cite{sentrysearch2026, video_rac2025, gemini_emb2_docs}.} %[cite: 1, 2]
+\label{fig:comparativa_sentrysearch_vs_tfm}
+\end{figure}
+
+El Cuadro~\ref{tab:comparativa_sentrysearch_tfm} sintetiza las diferencias técnicas verificables entre ambas implementaciones sobre el mismo ecosistema de modelos fundacionales. %[cite: 1, 2, 4]
+
+\begin{table}[htbp]
+\centering
+\small
+\setlength{\tabcolsep}{4.5pt}
+\caption{Comparativa técnica y de costes operativos entre \textit{SentrySearch} y la arquitectura desarrollada en el TFM \cite{sentrysearch2026, video_rac2025, gemini_emb2_docs}.} %[cite: 1, 2, 4]
+\label{tab:comparativa_sentrysearch_tfm}
+\begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}p{3.6cm} >{\raggedright\arraybackslash}p{5.4cm} >{\raggedright\arraybackslash}X}
+\toprule
+\textbf{Dimensión Técnica} & \textbf{SentrySearch (Ventana Fija)} & \textbf{Arquitectura TFM (Propuesta)} \\
+\midrule
+Partición temporal (\textit{Chunking}) & Fija ($30\text{ s}$ con $5\text{ s}$ de solapamiento) & Adaptativa por plano (SSIM Gaussiano + cota máx.) \\ \addlinespace[2pt]
+Detección de cambios / información & Heurística por tamaño de archivo JPEG & Matemática (Entropía de Shannon sobre histograma) \\ \addlinespace[2pt]
+Representación visual enviada a API & Vídeo completo tokenizado a $1\text{ FPS}$ ($30\text{ frames}$) & $3$ fotogramas clave ($F_{\text{ini}}, F_{\text{entropía}}, F_{\text{fin}}$) \\ \addlinespace[2pt]
+Integración del canal auditivo & Sin alineación explícita de transcripción & Transcripción alineada fusionada en \texttt{Content} y \textit{Payload} \\ \addlinespace[2pt]
+Fotogramas facturados ($1\text{ h}$ vídeo) & $4.315\text{ frames/h}$ ($\approx \$3{,}41\text{/h}$ en Gemini API) & $\sim 432\text{ frames/h}$ ($\mathbf{-89,98\%}$ carga visual) \\ \addlinespace[2pt]
+Motor de almacenamiento vectorial & ChromaDB local (colecciones separadas) & Qdrant (\texttt{PointStruct}, HNSW, UUIDv5 idempotente) \\ \addlinespace[2pt]
+Refinamiento de Segunda Etapa & VLM sobre clip recortado + \texttt{--dedupe 0.9} & \textit{Gemini 3.5 Flash Lite} Bimodal ($2$ frames + texto) + Fallback \\
+\bottomrule
+\end{tabularx}
+\end{table}
