@@ -12,7 +12,10 @@ numpy>=1.24.0
 
 # --- Procesamiento Multimedia (Fase de Ingestión) ---
 # OpenCV es el estándar para leer y extraer frames de vídeo
+# Requiere el binario del sistema `ffmpeg` instalado en el PATH para extraer pistas de audio
 opencv-python-headless>=4.8.0
+openai-whisper>=20231117
+imageio-ffmpeg>=0.5.0
 
 # --- Calidad de Código y Testing (DevTools) ---
 pytest>=7.4.0      # Framework para hacer tests automatizados

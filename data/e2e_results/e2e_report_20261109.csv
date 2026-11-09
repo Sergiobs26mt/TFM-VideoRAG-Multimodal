@@ -1,0 +1,47 @@
+query,video_name,expected_start,expected_end,hit_rank_retrieval,hit_rank_rerank
+¿En qué segundo aparece un elefante caminando en un recinto?,animals.mp4,0.0,1.0,1,1
+¿En qué momento aparecen lémures de cola anillada con el rótulo de REINO ANIMALIA?,animals.mp4,1.0,5.0,1,1
+¿Dónde y cuándo se muestra un león macho descansando tumbado?,animals.mp4,5.0,10.0,,1
+¿En qué intervalo temporal aparece la cabecera con el texto ECOLOGÍA VERDE?,animals.mp4,10.0,14.0,3,1
+¿Cuándo se observa a tres elefantes incluyendo una cría caminando entre la hierba?,animals.mp4,14.0,18.0,1,1
+¿En qué segundo aparece un gato gris con ojos verdes en primer plano?,animals.mp4,18.0,23.0,2,1
+¿En qué momento aparece el ojo de un camaleón en primer plano macro?,animals.mp4,23.0,29.0,1,1
+¿Cuándo se muestra a un grupo de ciervas descansando en la nieve?,animals.mp4,29.0,32.0,4,1
+¿En qué intervalo se ve una medusa nadando en el mar azul?,animals.mp4,32.0,35.0,3,1
+¿Dónde aparece una leona con un collar de rastreo caminando?,animals.mp4,35.0,39.0,1,1
+¿En qué segundos se ven tres cisnes blancos en un lago al amanecer?,animals.mp4,39.0,45.0,1,1
+¿Cuándo aparece un ternero negro con la cara blanca en primer plano?,animals.mp4,45.0,49.0,2,1
+¿En qué momento aparece una vaca Hereford marrón y blanca junto a su cría?,animals.mp4,49.0,52.0,2,1
+¿En qué parte del vídeo se ve un ave rapaz de plumaje marrón y pecho blanco en primer plano?,animals.mp4,52.0,59.0,1,1
+¿En qué segundos aparece una nutria marina flotando de espaldas en el agua?,animals.mp4,59.0,64.0,2,2
+¿Cuándo se muestra una animación 3D de los orgánulos de una célula animal?,animals.mp4,64.0,76.0,1,1
+¿En qué momento se observa a un caballo pastando hierba verde de cerca?,animals.mp4,76.0,81.0,1,1
+¿Cuándo aparece un ternero mamando de la ubre de una vaca?,animals.mp4,81.0,86.0,1,1
+¿En qué segundos aparece una ardilla comiendo plátanos sobre una tabla de madera?,animals.mp4,86.0,90.0,1,1
+¿Dónde y en qué segundo se muestra una oveja blanca con etiquetas amarillas pastando?,animals.mp4,90.0,96.0,1,1
+¿En qué intervalo temporal corre una manada de ciervos por un bosque nevado?,animals.mp4,96.0,102.0,1,1
+¿Cuándo aparece una cría de foca moteada recostada en la arena de la playa?,animals.mp4,102.0,106.0,1,1
+¿En qué momento aparecen tres pingüinos en una orilla rocosa?,animals.mp4,106.0,110.0,1,1
+¿Cuándo aparece una cría de mono comiendo fruta con las dos manos?,animals.mp4,110.0,114.0,2,1
+¿En qué segundos se ven cebras comiendo pasto en una llanura árida?,animals.mp4,114.0,120.0,1,1
+¿En qué intervalo aparece un gallo o pollo blanco con cresta roja en primer plano?,animals.mp4,120.0,124.0,1,1
+¿Cuándo se muestra a tres osos pardos juntos en un prado verde?,animals.mp4,124.0,130.0,1,1
+¿En qué momento aparece el primer plano de la oreja peluda de un animal escuchando?,animals.mp4,130.0,136.0,1,1
+¿En qué segundos se ve un gran ciervo macho con cornamenta ramificada y crías moteadas?,animals.mp4,136.0,144.0,1,1
+¿Cuándo aparecen tres monos sentados juntos acicalándose y desparasitándose?,animals.mp4,144.0,158.0,1,1
+¿En qué parte se observa una animación 3D de glóbulos rojos dentro de un vaso sanguíneo?,animals.mp4,158.0,170.0,1,1
+¿Cuándo se muestra una animación azul de células fluyendo en espiral?,animals.mp4,170.0,174.0,1,1
+¿En qué intervalo temporal se ven eritrocitos en primer plano dentro de una arteria roja?,animals.mp4,174.0,180.0,4,4
+¿En qué segundo aparece el primerísimo plano del hocico de un ciervo respirando?,animals.mp4,180.0,186.0,1,1
+¿Cuándo se ve a un perro marrón jadeando con la lengua fuera?,animals.mp4,186.0,193.0,1,1
+¿En qué momento aparece el ojo verde de un gato atigrado de perfil?,animals.mp4,193.0,196.0,1,1
+¿En qué segundos se ve a una raya marina o mantarraya nadando en el agua?,animals.mp4,196.0,198.0,1,1
+¿Cuándo aparece una araña saltarina en macro con sus múltiples ojos negros?,animals.mp4,198.0,201.0,1,1
+¿En qué intervalo se muestra el ojo dorado y la cabeza de una rana de piel húmeda?,animals.mp4,201.0,208.0,1,1
+¿Cuándo aparece un caballo marrón con una mancha blanca en la frente?,animals.mp4,208.0,212.0,,1
+¿En qué segundos aparece una medusa gigante azul moteada con un buceador?,animals.mp4,212.0,217.0,1,1
+¿En qué momento se ve a un caballo gris sacudir la cabeza con energía?,animals.mp4,217.0,223.0,4,
+¿Cuándo se muestran dos nutrias marinas flotando juntas boca arriba en el agua?,animals.mp4,223.0,227.0,1,1
+¿En qué segundos aparece una ardilla gris comiendo una semilla sostenida con sus manos?,animals.mp4,227.0,232.0,2,1
+¿En qué parte del vídeo aparece una tortuga marina nadando en un arrecife de coral?,animals.mp4,232.0,241.0,1,1
+¿En qué momento aparece una esponja de mar amarilla porosa sobre fondo negro?,animals.mp4,241.0,243.0,1,1

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Callable
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from src.config import (
     RAW_DIR,
     RERANKER_MODEL,
     VECTOR_SIZE,
+    WHISPER_MODEL,
     SearchConfig,
 )
 from src.embeddings.gemini_vectorizer import GeminiMultimodalVectorizer
@@ -30,6 +32,37 @@ def format_timestamp(seconds: float) -> str:
     return f"{int(minutes):02d}:{secs:04.1f}"
 
 
+def _merge_transcripts(first: str | None, second: str | None) -> str | None:
+    """Combina dos transcripciones cronológicas sin duplicar frases fronterizas repetidas."""
+    t1 = (first or "").strip()
+    t2 = (second or "").strip()
+    if not t1 and not t2:
+        return None
+    if not t1:
+        return t2
+    if not t2 or t1 == t2 or t2 in t1:
+        return t1
+    if t1 in t2:
+        return t2
+
+    w1 = t1.split()
+    w2 = t2.split()
+    max_overlap = min(len(w1), len(w2))
+    overlap_len = 0
+    for k in range(max_overlap, 0, -1):
+        if w1[-k:] == w2[:k]:
+            overlap_len = k
+            break
+
+    combined = " ".join(w1 + w2[overlap_len:])
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", combined) if s.strip()]
+    deduped: list[str] = []
+    for sentence in sentences:
+        if not deduped or deduped[-1] != sentence:
+            deduped.append(sentence)
+    return " ".join(deduped)
+
+
 def _deduplicate_temporal_candidates(
     candidates: list[SearchResult],
     *,
@@ -38,31 +71,50 @@ def _deduplicate_temporal_candidates(
 ) -> list[SearchResult]:
     """Fusiona micro-fragmentos redundantes de la misma escena conservando el de mayor similitud."""
     selected: list[SearchResult] = []
-    origins: list[tuple[float, float]] = []
+    origins: list[tuple[float, float, str]] = []
     for cand in candidates:
         cand_dur = cand.end_time - cand.start_time
         cand_mid = (cand.start_time + cand.end_time) / 2.0
+        cand_tr = (cand.transcript or "").strip()
         merged = False
         for idx, prev in enumerate(selected):
             if prev.video_name != cand.video_name:
                 continue
-            orig_dur, orig_mid = origins[idx]
-            if (
+            orig_dur, orig_mid, orig_tr = origins[idx]
+            gap = max(
+                0.0,
+                max(cand.start_time, prev.start_time)
+                - min(cand.end_time, prev.end_time),
+            )
+            is_micro_neighbor = (
                 max(cand_dur, orig_dur) < micro_chunk_duration
                 and abs(cand_mid - orig_mid) < min_scene_separation
-            ):
+            )
+            is_same_transcript_neighbor = bool(
+                cand_tr
+                and orig_tr
+                and cand_tr == orig_tr
+                and gap <= min_scene_separation
+            )
+            if is_micro_neighbor or is_same_transcript_neighbor:
+                earlier, later = (
+                    (prev, cand) if prev.start_time <= cand.start_time else (cand, prev)
+                )
                 selected[idx] = SearchResult(
                     score=prev.score,
                     video_name=prev.video_name,
                     chunk_index=prev.chunk_index,
                     start_time=min(prev.start_time, cand.start_time),
                     end_time=max(prev.end_time, cand.end_time),
+                    transcript=_merge_transcripts(
+                        earlier.transcript, later.transcript
+                    ),
                 )
                 merged = True
                 break
         if not merged:
             selected.append(cand)
-            origins.append((cand_dur, cand_mid))
+            origins.append((cand_dur, cand_mid, cand_tr))
     return selected
 
 
@@ -126,6 +178,8 @@ class VideoRAGService:
         jpeg_quality: int = 80,
         output_dimensionality: int | None = None,
         target_width: int = 512,
+        enable_audio: bool = True,
+        whisper_model: str = WHISPER_MODEL,
         progress_callback: Callable[[str, float], None] | None = None,
     ) -> int:
         """Fragmenta, vectoriza e indexa un vídeo en Qdrant."""
@@ -144,6 +198,8 @@ class VideoRAGService:
             jpeg_quality=jpeg_quality,
             output_dimensionality=dim,
             target_width=target_width,
+            enable_audio=enable_audio,
+            whisper_model=whisper_model,
         )
         self.engine.create_collection(vector_size=dim)
         inserted = self.engine.insert_chunks(chunks, video_name=video_path.name)

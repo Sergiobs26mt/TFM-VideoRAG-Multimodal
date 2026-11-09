@@ -18,6 +18,8 @@ VECTOR_SIZE: int = 3072
 MAX_CHUNKS_PER_VIDEO: int = 800
 EMBEDDING_MODEL: str = "gemini-embedding-2-preview"
 RERANKER_MODEL: str = "gemini-3.5-flash-lite"
+WHISPER_MODEL: str = "base"
+AUDIO_LANGUAGE: str = "es"
 
 
 @dataclass(frozen=True)
@@ -78,6 +80,19 @@ class SearchConfig:
             raise ValueError("top_k debe ser >= 1.")
 
 
+@dataclass(frozen=True)
+class AudioConfig:
+    """Parámetros de transcripción ASR y alineación temporal de audio."""
+
+    enable_audio: bool = True
+    whisper_model: str = WHISPER_MODEL
+    language: str | None = AUDIO_LANGUAGE
+
+    def __post_init__(self) -> None:
+        if not self.whisper_model.strip():
+            raise ValueError("whisper_model no puede estar vacío.")
+
+
 def build_run_config(
     mode: str | None = None,
     cli_args: dict[str, Any] | None = None,
@@ -103,6 +118,7 @@ def build_run_config(
             "chunking_defaults": asdict(ChunkingConfig()),
             "vectorizer_defaults": asdict(VectorizerConfig()),
             "search_defaults": asdict(SearchConfig()),
+            "audio_defaults": asdict(AudioConfig()),
             "python": sys.version,
         }
     )

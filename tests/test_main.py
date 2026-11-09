@@ -24,13 +24,27 @@ def test_format_timestamp() -> None:
 
 
 def test_print_results(capsys: pytest.CaptureFixture[str]) -> None:
-    main.print_results([SearchResult(0.91234, "v.mp4", 2, 60.0, 75.5)])
+    main.print_results(
+        [
+            SearchResult(
+                0.91234,
+                "v.mp4",
+                2,
+                60.0,
+                75.5,
+                transcript="Locución de prueba sobre diccionarios",
+            )
+        ]
+    )
     out = capsys.readouterr().out
     assert "01:00.0 - 01:15.5" in out and "0.9123" in out
+    assert 'Transcripción: "Locución de prueba sobre diccionarios"' in out
 
 
 def test_print_results_reranked(capsys: pytest.CaptureFixture[str]) -> None:
-    res = SearchResult(0.35, "v.mp4", 1, 10.0, 20.0)
+    res = SearchResult(
+        0.35, "v.mp4", 1, 10.0, 20.0, transcript="Voz explicando el código"
+    )
     reranked = RerankedResult(
         result=res,
         relevance_score=0.98,
@@ -40,6 +54,7 @@ def test_print_results_reranked(capsys: pytest.CaptureFixture[str]) -> None:
     main.print_results([reranked])
     out = capsys.readouterr().out
     assert "VALIDADO" in out and "Es un reptil válido" in out
+    assert 'Transcripción: "Voz explicando el código"' in out
 
 
 def test_print_results_empty(capsys: pytest.CaptureFixture[str]) -> None:
@@ -57,6 +72,12 @@ def test_parse_args_defaults() -> None:
         and args.target_width == 512
     )
     assert args.rerank is True
+    assert args.no_audio is False
+    assert args.whisper_model == "base"
+
+    custom = main.parse_args(["--no-audio", "--whisper-model", "small"])
+    assert custom.no_audio is True
+    assert custom.whisper_model == "small"
 
 
 def _fake_inputs(monkeypatch: pytest.MonkeyPatch, lines: list[str]) -> None:

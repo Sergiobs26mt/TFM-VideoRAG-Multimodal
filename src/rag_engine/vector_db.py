@@ -118,6 +118,7 @@ class QdrantSearchEngine:
                     "chunk_index": c.index,
                     "start_time": c.start_time,
                     "end_time": c.end_time,
+                    "transcript": c.transcript,
                 },
             )
             for c in chunks
@@ -252,6 +253,7 @@ class QdrantSearchEngine:
         results: list[SearchResult] = []
         for point in response.points:
             payload = point.payload or {}
+            raw_transcript = payload.get("transcript")
             results.append(
                 SearchResult(
                     score=float(point.score),
@@ -259,6 +261,7 @@ class QdrantSearchEngine:
                     chunk_index=int(payload.get("chunk_index", -1)),
                     start_time=float(payload.get("start_time", 0.0)),
                     end_time=float(payload.get("end_time", 0.0)),
+                    transcript=str(raw_transcript) if raw_transcript is not None else None,
                 )
             )
         return results

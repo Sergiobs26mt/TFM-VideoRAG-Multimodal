@@ -15,6 +15,7 @@ from src.config import (
     DB_PATH,
     RAW_DIR,
     VECTOR_SIZE,
+    WHISPER_MODEL,
     build_run_config,
 )
 from src.models import (
@@ -90,6 +91,8 @@ def index_video_in_ui(
     jpeg_quality: int = 80,
     output_dimensionality: int = VECTOR_SIZE,
     target_width: int = 512,
+    enable_audio: bool = True,
+    whisper_model: str = WHISPER_MODEL,
 ) -> int:
     """Ejecuta el pipeline de indexación mostrando avance en vivo en la interfaz."""
     progress_bar = st.progress(0.0, text="Iniciando pipeline de procesamiento...")
@@ -109,6 +112,8 @@ def index_video_in_ui(
                 jpeg_quality=jpeg_quality,
                 output_dimensionality=output_dimensionality,
                 target_width=target_width,
+                enable_audio=enable_audio,
+                whisper_model=whisper_model,
                 progress_callback=progress_callback,
             )
         )
@@ -201,6 +206,20 @@ def render_sidebar(
             help="Redimensiona los fotogramas clave antes de enviarlos a Gemini. 512px reduce ~60% los tokens y previene el error 429.",
         )
 
+        st.markdown("**Transcripción de Audio (ASR)**")
+        p_enable_audio = st.checkbox(
+            "Transcribir y alinear audio (Whisper)",
+            value=True,
+            help="Extrae la pista de voz con ffmpeg y la alinea temporalmente con cada plano.",
+        )
+        p_whisper_model = st.selectbox(
+            "Modelo Whisper",
+            options=["tiny", "base", "small"],
+            index=1,
+            disabled=not p_enable_audio,
+            help="Modelo local de OpenAI Whisper para reconocimiento de voz.",
+        )
+
     if selected_video and st.sidebar.button(
         "Re-indexar vídeo seleccionado", use_container_width=True
     ):
@@ -217,6 +236,8 @@ def render_sidebar(
                         entropy_stride=p_entropy_stride,
                         jpeg_quality=p_jpeg_quality,
                         target_width=p_target_width,
+                        enable_audio=p_enable_audio,
+                        whisper_model=p_whisper_model,
                     )
                     st.sidebar.success(f"Re-indexados {n} chunks de '{selected_video}'.")
                     st.session_state["active_video"] = selected_video
@@ -256,6 +277,8 @@ def render_sidebar(
                         entropy_stride=p_entropy_stride,
                         jpeg_quality=p_jpeg_quality,
                         target_width=p_target_width,
+                        enable_audio=p_enable_audio,
+                        whisper_model=p_whisper_model,
                     )
                     st.sidebar.success(f"Indexados {n} chunks de '{chosen_raw}'.")
                     st.session_state["active_video"] = chosen_raw
@@ -299,6 +322,8 @@ def render_sidebar(
                         entropy_stride=p_entropy_stride,
                         jpeg_quality=p_jpeg_quality,
                         target_width=p_target_width,
+                        enable_audio=p_enable_audio,
+                        whisper_model=p_whisper_model,
                     )
                     st.sidebar.success(f"Completado: {n} chunks indexados.")
                     st.session_state["active_video"] = uploaded_file.name
@@ -525,8 +550,10 @@ def main() -> None:
                                 )
 
                             st.caption(
-                                f"**Análisis visual (Gemini 3.5 Flash Lite):** {r.reasoning}"
+                                f"**Análisis bimodal (Gemini 3.5 Flash Lite):** {r.reasoning}"
                             )
+                            if r.transcript:
+                                st.caption(f'**Transcripción:** "{r.transcript}"')
 
                             score_pct = max(0, min(100, int(r.relevance_score * 100)))
                             st.progress(
@@ -534,6 +561,8 @@ def main() -> None:
                                 text=f"Relevancia visual: {r.relevance_score:.2f} | Coseno Qdrant: {r.vector_score:.4f}",
                             )
                         else:
+                            if r.transcript:
+                                st.caption(f'**Transcripción:** "{r.transcript}"')
                             score_pct = max(0, min(100, int(r.score * 100)))
                             st.progress(
                                 score_pct / 100.0, text=f"Similitud coseno: {r.score:.4f}"

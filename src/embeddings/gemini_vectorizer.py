@@ -45,9 +45,11 @@ class GeminiMultimodalVectorizer:
         self._target_width = cfg.target_width
 
     def build_payload(
-        self, key_frames: list[NDArray[np.uint8]]
+        self,
+        key_frames: list[NDArray[np.uint8]],
+        transcript: str | None = None,
     ) -> types.Content:
-        """Codifica fotogramas clave a JPEG en un único ``Content``."""
+        """Codifica fotogramas clave a JPEG y adjunta la transcripción en un único ``Content``."""
         if not key_frames:
             raise ValueError("Se necesita al menos un fotograma clave.")
 
@@ -62,19 +64,26 @@ class GeminiMultimodalVectorizer:
             )
             for frame in key_frames
         ]
+        if transcript is not None and transcript.strip():
+            parts.append(
+                types.Part.from_text(
+                    text=f"Transcripción de audio del fragmento: {transcript.strip()}"
+                )
+            )
         return types.Content(parts=parts)
 
     async def vectorize_chunk(
         self, chunk: VideoChunk, key_frames: list[NDArray[np.uint8]]
     ) -> VectorizedChunk:
         """Genera de forma asíncrona el embedding de un chunk."""
-        payload = self.build_payload(key_frames)
+        payload = self.build_payload(key_frames, transcript=chunk.transcript)
         values = await self._embed(payload, f"chunk {chunk.index}")
         return VectorizedChunk(
             index=chunk.index,
             start_time=chunk.start_time,
             end_time=chunk.end_time,
             embedding=values,
+            transcript=chunk.transcript,
         )
 
     async def embed_text(self, text: str) -> list[float]:

@@ -9,15 +9,18 @@ import pytest
 from src.config import (
     MAX_CHUNKS_PER_VIDEO,
     VECTOR_SIZE,
+    AudioConfig,
     ChunkingConfig,
     SearchConfig,
     VectorizerConfig,
     build_run_config,
 )
 from src.models import (
+    AudioTranscriptionError,
     QuotaSafetyError,
     RerankedResult,
     SearchResult,
+    TranscriptSegment,
     VectorDBError,
     VectorizationError,
     VectorizedChunk,
@@ -40,6 +43,7 @@ def test_domain_models_are_immutable_and_delegate_fields() -> None:
         chunk_index=3,
         start_time=12.0,
         end_time=18.5,
+        transcript="diccionarios en python",
     )
     reranked = RerankedResult(
         result=res,
@@ -47,16 +51,30 @@ def test_domain_models_are_immutable_and_delegate_fields() -> None:
         is_relevant=True,
         reasoning="Coincide con la consulta.",
     )
+    assert chunk.transcript is None
+    assert vec_chunk.transcript is None
+    assert res.transcript == "diccionarios en python"
     assert reranked.video_name == "demo.mp4"
     assert reranked.chunk_index == 3
     assert reranked.start_time == 12.0
     assert reranked.end_time == 18.5
     assert reranked.vector_score == 0.42
     assert reranked.score == 0.42
+    assert reranked.transcript == "diccionarios en python"
+
+    seg = TranscriptSegment(start_time=1.0, end_time=3.5, text="hola mundo")
+    assert (seg.start_time, seg.end_time, seg.text) == (1.0, 3.5, "hola mundo")
+    with pytest.raises(FrozenInstanceError):
+        seg.text = "otro"  # type: ignore[misc]
 
 
 def test_domain_exceptions_inherit_from_runtime_error() -> None:
-    for exc_cls in (QuotaSafetyError, VectorizationError, VectorDBError):
+    for exc_cls in (
+        QuotaSafetyError,
+        VectorizationError,
+        VectorDBError,
+        AudioTranscriptionError,
+    ):
         assert issubclass(exc_cls, RuntimeError)
 
 
@@ -124,6 +142,14 @@ def test_build_run_config_includes_defaults_and_mode() -> None:
         "rerank": True,
         "reranker_model": "gemini-3.5-flash-lite",
     }
+    assert ui_cfg["audio_defaults"] == {
+        "enable_audio": True,
+        "whisper_model": "base",
+        "language": "es",
+    }
+
+    with pytest.raises(ValueError):
+        AudioConfig(whisper_model="   ")
 
     cli_cfg = build_run_config(cli_args={"video": "test.mp4", "top_k": 3})
     assert cli_cfg["cli_args"] == {"video": "test.mp4", "top_k": 3}

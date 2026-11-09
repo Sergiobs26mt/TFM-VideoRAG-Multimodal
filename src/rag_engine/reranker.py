@@ -100,13 +100,19 @@ class MultimodalReranker:
                 f"A continuación se presentan {len(candidates)} fragmentos de vídeo candidatos "
                 "recuperados previamente mediante similitud vectorial.\n"
                 "Para cada candidato se proporcionan sus fotogramas clave representativos "
-                "(como imagen individual o tira vertical con inicio, mitad y fin del fragmento).\n\n"
-                "Instrucciones de evaluación:\n"
-                "1. Determina si en alguno de los fotogramas o paneles del candidato aparece realmente lo que pide la consulta.\n"
-                "2. Asigna 'is_relevant': true solo si el contenido cumple claramente la consulta. "
-                "Si es un concepto no relacionado (por ejemplo, células en lugar de un animal), marca false.\n"
-                "3. Asigna 'relevance_score' entre 0.0 y 1.0 (1.0 = certeza total, 0.0 = totalmente no relacionado).\n"
-                "4. Proporciona en 'reasoning' una frase muy breve en español (máximo 12 palabras).\n\n"
+                "(como imagen individual o tira vertical con inicio, mitad y fin del fragmento) "
+                "y su transcripción hablada alineada temporalmente.\n\n"
+                "Instrucciones de evaluación bimodal (Visual + Auditiva):\n"
+                "1. Realiza un análisis bimodal: valida el candidato si el concepto buscado aparece "
+                "visualmente en los fotogramas, si se menciona o explica en la transcripción hablada "
+                "del segmento, o en ambos.\n"
+                "2. No descartes un fragmento como Falso Positivo si el concepto buscado se explica "
+                "en la transcripción hablada aunque el texto en pantalla sea pequeño o no se aprecie "
+                "en el fotograma puntual, ni viceversa.\n"
+                "3. Asigna 'is_relevant': true si el contenido visual o auditivo cumple la consulta. "
+                "Si no guarda relación ni en imagen ni en voz, marca false.\n"
+                "4. Asigna 'relevance_score' entre 0.0 y 1.0 (1.0 = certeza total, 0.0 = totalmente no relacionado).\n"
+                "5. Proporciona en 'reasoning' una frase muy breve en español (máximo 12 palabras).\n\n"
                 "Responde ESTRICTAMENTE con un array JSON con la siguiente estructura para cada candidato:\n"
                 "[\n"
                 "  {\n"
@@ -129,9 +135,15 @@ class MultimodalReranker:
 
         has_any_frame = False
         for idx, cand in enumerate(candidates):
+            transcript_line = (
+                f"Transcripción hablada en este segmento: {cand.transcript.strip()}"
+                if cand.transcript and cand.transcript.strip()
+                else "Transcripción hablada: [Sin locución detectada]"
+            )
             header = (
                 f"\n--- Candidato {idx} (Vídeo: {cand.video_name}, "
-                f"Intervalo: {cand.start_time:.1f}s - {cand.end_time:.1f}s) ---"
+                f"Intervalo: {cand.start_time:.1f}s - {cand.end_time:.1f}s) ---\n"
+                f"{transcript_line}"
             )
             contents.append(header)
             for jpeg_bytes in jpeg_map.get(idx, []):

@@ -79,6 +79,8 @@ def test_index_video_in_ui_custom_params(tmp_path: Path) -> None:
             entropy_stride=2,
             jpeg_quality=80,
             target_width=640,
+            enable_audio=False,
+            whisper_model="small",
         )
 
     assert n == 3
@@ -90,6 +92,8 @@ def test_index_video_in_ui_custom_params(tmp_path: Path) -> None:
     assert kwargs["entropy_stride"] == 2
     assert kwargs["jpeg_quality"] == 80
     assert kwargs["target_width"] == 640
+    assert kwargs["enable_audio"] is False
+    assert kwargs["whisper_model"] == "small"
 
 
 def test_execute_search_with_auditor() -> None:

@@ -14,6 +14,7 @@ from src.config import (
     DB_PATH,
     RAW_DIR,
     VECTOR_SIZE,
+    WHISPER_MODEL,
 )
 from src.config import (
     build_run_config as _build_run_config,
@@ -38,6 +39,16 @@ logger = logging.getLogger(__name__)
 EXIT_COMMANDS: tuple[str, ...] = ("salir", "exit", "quit", "q")
 
 
+def _format_transcript_snippet(transcript: str | None, max_chars: int = 120) -> str | None:
+    """Devuelve la transcripción limpia y truncada para consola o ``None`` si está vacía."""
+    if not transcript or not transcript.strip():
+        return None
+    cleaned = transcript.strip()
+    if len(cleaned) <= max_chars:
+        return cleaned
+    return f"{cleaned[: max_chars - 3].rstrip()}..."
+
+
 def print_results(results: Sequence[SearchResult | RerankedResult]) -> None:
     """Imprime por consola los resultados de búsqueda de forma legible."""
     if not results:
@@ -45,6 +56,7 @@ def print_results(results: Sequence[SearchResult | RerankedResult]) -> None:
         return
     print(f"\nTop {len(results)} resultados:")
     for rank, r in enumerate(results, start=1):
+        snippet = _format_transcript_snippet(r.transcript)
         if isinstance(r, RerankedResult):
             status = "VALIDADO" if r.is_relevant else "DESCARTADO"
             print(
@@ -61,6 +73,8 @@ def print_results(results: Sequence[SearchResult | RerankedResult]) -> None:
                 f"{format_timestamp(r.end_time)}  "
                 f"({r.start_time:.1f}s - {r.end_time:.1f}s)  score={r.score:.4f}"
             )
+        if snippet is not None:
+            print(f'      Transcripción: "{snippet}"')
 
 
 def print_benchmark_summary(summary: BenchmarkSummary) -> None:
@@ -117,6 +131,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action=argparse.BooleanOptionalAction,
         default=True,
         help="Activar reordenación multimodal (Etapa 2 con Gemini 3.5 Flash Lite)",
+    )
+    parser.add_argument(
+        "--no-audio",
+        action="store_true",
+        help="Desactivar la extracción y transcripción de audio con Whisper",
+    )
+    parser.add_argument(
+        "--whisper-model",
+        default=WHISPER_MODEL,
+        help=f"Modelo local de OpenAI Whisper (default: {WHISPER_MODEL})",
     )
     parser.add_argument(
         "--benchmark",
@@ -197,6 +221,8 @@ def main(argv: list[str] | None = None) -> int:
                         entropy_stride=args.entropy_stride,
                         jpeg_quality=args.jpeg_quality,
                         target_width=args.target_width,
+                        enable_audio=not args.no_audio,
+                        whisper_model=args.whisper_model,
                     )
                 )
             if args.benchmark:

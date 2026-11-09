@@ -7,13 +7,18 @@ import logging
 from collections.abc import Callable
 from pathlib import Path
 
-from src.config import MAX_CHUNKS_PER_VIDEO, PROCESSED_DIR, VECTOR_SIZE
+from src.config import MAX_CHUNKS_PER_VIDEO, PROCESSED_DIR, VECTOR_SIZE, WHISPER_MODEL
 from src.embeddings.gemini_vectorizer import GeminiMultimodalVectorizer
 from src.models import (
+    AudioTranscriptionError,
     QuotaSafetyError,
     VectorizationError,
     VectorizedChunk,
     VideoChunk,
+)
+from src.processing.audio_transcriber import (
+    align_transcript_with_chunks,
+    transcribe_video_audio,
 )
 from src.processing.keyframe_cache import save_video_keyframes
 from src.processing.video_chunker import process_video_single_pass
@@ -33,6 +38,8 @@ async def process_video_pipeline(
     output_dimensionality: int = VECTOR_SIZE,
     target_width: int = 512,
     max_shot_duration: float = 8.0,
+    enable_audio: bool = True,
+    whisper_model: str = WHISPER_MODEL,
 ) -> list[VectorizedChunk]:
     """Procesa un vídeo de principio a fin y devuelve sus chunks vectorizados.
 
@@ -101,6 +108,29 @@ async def process_video_pipeline(
         if progress_callback:
             progress_callback("No se detectaron fotogramas en el vídeo.", 1.0)
         return []
+
+    if enable_audio:
+        if progress_callback:
+            progress_callback(
+                "Transcribiendo audio y alineando locución con los planos...", 0.25
+            )
+        try:
+            segments = await asyncio.to_thread(
+                transcribe_video_audio, video_path, whisper_model
+            )
+            if segments:
+                chunks = align_transcript_with_chunks(chunks, segments)
+                enriched = sum(1 for c in chunks if c.transcript)
+                logger.info(
+                    "Audio alineado: %d/%d chunks enriquecidos con transcripción",
+                    enriched,
+                    len(chunks),
+                )
+        except (AudioTranscriptionError, RuntimeError, OSError, ValueError) as exc:
+            logger.warning(
+                "Fallo en transcripción de audio; continuando solo con modalidad visual: %s",
+                exc,
+            )
 
     await asyncio.to_thread(
         save_video_keyframes,

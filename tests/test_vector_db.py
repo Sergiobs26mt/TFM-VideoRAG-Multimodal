@@ -139,3 +139,21 @@ def test_delete_video_and_clear_database_remove_cached_keyframes(tmp_path: Path)
     engine.clear_database(vector_size=3)
     assert load_chunk_keyframes_jpeg("video_b.mp4", 0, processed_dir=processed_dir) == []
 
+
+def test_insert_and_search_persists_transcript() -> None:
+    engine = _engine()
+    chunks = [
+        VectorizedChunk(
+            0, 0.0, 3.0, [1.0, 0.0, 0.0], transcript="Explicamos diccionarios en Python."
+        ),
+        VectorizedChunk(1, 3.0, 6.0, [0.0, 1.0, 0.0], transcript=None),
+    ]
+    engine.insert_chunks(chunks, video_name="python_tutorial.mp4")
+
+    results = engine.search_event([1.0, 0.1, 0.0], limit=2)
+    assert len(results) == 2
+    assert results[0].chunk_index == 0
+    assert results[0].transcript == "Explicamos diccionarios en Python."
+    assert results[1].chunk_index == 1
+    assert results[1].transcript is None
+

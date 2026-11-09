@@ -17,6 +17,19 @@ class VectorDBError(RuntimeError):
     """Error al operar con la base de datos vectorial."""
 
 
+class AudioTranscriptionError(RuntimeError):
+    """Error en la extracción o transcripción de la pista de audio."""
+
+
+@dataclass(frozen=True)
+class TranscriptSegment:
+    """Segmento de locución transcrita con marcas temporales en segundos."""
+
+    start_time: float
+    end_time: float
+    text: str
+
+
 @dataclass(frozen=True)
 class VideoChunk:
     """Plano temporal coherente dentro de un vídeo."""
@@ -26,6 +39,7 @@ class VideoChunk:
     end_frame: int
     start_time: float
     end_time: float
+    transcript: str | None = None
 
 
 @dataclass(frozen=True)
@@ -36,6 +50,7 @@ class VectorizedChunk:
     start_time: float
     end_time: float
     embedding: list[float]
+    transcript: str | None = None
 
 
 @dataclass(frozen=True)
@@ -47,6 +62,7 @@ class SearchResult:
     chunk_index: int
     start_time: float
     end_time: float
+    transcript: str | None = None
 
 
 @dataclass(frozen=True)
@@ -87,3 +103,8 @@ class RerankedResult:
     def score(self) -> float:
         """Alias de ``vector_score`` para compatibilidad uniforme en resultados."""
         return self.result.score
+
+    @property
+    def transcript(self) -> str | None:
+        """Transcripción de audio alineada con el fragmento."""
+        return self.result.transcript

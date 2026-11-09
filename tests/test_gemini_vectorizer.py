@@ -51,6 +51,48 @@ def test_payload_has_one_part_per_frame(monkeypatch: pytest.MonkeyPatch) -> None
     assert content.parts[0].inline_data.mime_type == "image/jpeg"
 
 
+def test_payload_includes_transcript_part_when_present(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    vec = _make(monkeypatch, None)
+    content = vec.build_payload(_frames(), transcript="  explicamos diccionarios  ")
+    assert content.parts is not None and len(content.parts) == 4
+    assert content.parts[3].text == (
+        "Transcripción de audio del fragmento: explicamos diccionarios"
+    )
+
+    blank_content = vec.build_payload(_frames(), transcript="   ")
+    assert blank_content.parts is not None and len(blank_content.parts) == 3
+
+
+def test_vectorize_chunk_propagates_transcript_to_payload_and_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: dict[str, Any] = {}
+
+    async def fake(**kwargs: Any) -> Any:
+        seen.update(kwargs)
+        return _response([0.1, 0.2, 0.3])
+
+    chunk_with_audio = VideoChunk(
+        index=3,
+        start_frame=0,
+        end_frame=9,
+        start_time=1.5,
+        end_time=4.0,
+        transcript="clave y valor en dict",
+    )
+    result = asyncio.run(
+        _make(monkeypatch, fake).vectorize_chunk(chunk_with_audio, _frames())
+    )
+    assert result.transcript == "clave y valor en dict"
+    sent_parts = seen["contents"].parts
+    assert len(sent_parts) == 4
+    assert sent_parts[3].text == (
+        "Transcripción de audio del fragmento: clave y valor en dict"
+    )
+
+
 def test_empty_payload(monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.raises(ValueError):
         _make(monkeypatch, None).build_payload([])

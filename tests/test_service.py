@@ -45,11 +45,19 @@ def test_service_index_video_stores_vectors_in_qdrant(tmp_path: Path) -> None:
         return_value=fake_chunks,
     ) as mock_pipe:
         inserted = asyncio.run(
-            service.index_video("demo.mp4", max_concurrent=2, threshold=0.4)
+            service.index_video(
+                "demo.mp4",
+                max_concurrent=2,
+                threshold=0.4,
+                enable_audio=False,
+                whisper_model="small",
+            )
         )
 
     assert inserted == 2
     mock_pipe.assert_called_once()
+    assert mock_pipe.call_args.kwargs["enable_audio"] is False
+    assert mock_pipe.call_args.kwargs["whisper_model"] == "small"
     assert service.get_indexed_videos() == ["demo.mp4"]
 
     with pytest.raises(FileNotFoundError):
@@ -284,6 +292,103 @@ def test_service_search_preserves_distinct_short_shots_over_one_second() -> None
         service.search("Plano en blanco y negro", limit=2, rerank=False)
     )
     assert [r.chunk_index for r in results] == [21, 22]
+
+
+def test_service_search_deduplicates_overlapping_transcripts_across_merged_micro_chunks() -> None:
+    engine = QdrantSearchEngine(path=None)
+    engine.create_collection(vector_size=3)
+    # 3 micro-chunks de 0.4s en la misma escena donde la frase fronteriza
+    # "Hoy veremos diccionarios." fue asignada a chunks adyacentes por solapamiento.
+    chunks = [
+        VectorizedChunk(
+            10,
+            60.0,
+            60.4,
+            [1.0, 0.01, 0.0],
+            transcript="Pasamos al código. Hoy veremos diccionarios.",
+        ),
+        VectorizedChunk(
+            11,
+            60.4,
+            60.8,
+            [1.0, 0.05, 0.0],
+            transcript="Hoy veremos diccionarios. Tienen clave y valor.",
+        ),
+        VectorizedChunk(
+            12,
+            60.8,
+            61.2,
+            [1.0, 0.02, 0.0],
+            transcript="Tienen clave y valor.",
+        ),
+    ]
+    engine.insert_chunks(chunks, video_name="python_tutorial.mp4")
+
+    fake_vectorizer = MagicMock()
+    fake_vectorizer.embed_text = AsyncMock(return_value=[1.0, 0.05, 0.0])
+
+    service = VideoRAGService(
+        engine=engine,
+        vectorizer=fake_vectorizer,
+        vector_size=3,
+    )
+
+    results = asyncio.run(
+        service.search("Diccionarios", limit=3, rerank=False)
+    )
+    assert len(results) == 1
+    assert results[0].start_time == pytest.approx(60.0)
+    assert results[0].end_time == pytest.approx(61.2)
+    assert results[0].transcript == (
+        "Pasamos al código. Hoy veremos diccionarios. Tienen clave y valor."
+    )
+
+
+def test_service_search_deduplicates_adjacent_chunks_with_identical_transcript() -> None:
+    engine = QdrantSearchEngine(path=None)
+    engine.create_collection(vector_size=3)
+    shared_tr = (
+        "Cuentan con un complejo sistema nervioso, además de órganos de los sentidos."
+    )
+    chunks = [
+        VectorizedChunk(
+            66,
+            193.8,
+            197.7,
+            [1.0, 0.0, 0.0],
+            transcript="Destaca el sistema respiratorio pulmonar de los mamíferos.",
+        ),
+        VectorizedChunk(48, 118.8, 120.5, [0.98, 0.02, 0.0], transcript=shared_tr),
+        VectorizedChunk(44, 115.3, 116.5, [0.97, 0.03, 0.0], transcript=shared_tr),
+        VectorizedChunk(46, 117.8, 118.8, [0.96, 0.04, 0.0], transcript=shared_tr),
+        VectorizedChunk(45, 116.5, 117.8, [0.95, 0.05, 0.0], transcript=shared_tr),
+        VectorizedChunk(
+            12,
+            18.9,
+            24.1,
+            [0.90, 0.10, 0.0],
+            transcript="El reino animalia es uno de los cinco reinos.",
+        ),
+    ]
+    engine.insert_chunks(chunks, video_name="animals.mp4")
+
+    fake_vectorizer = MagicMock()
+    fake_vectorizer.embed_text = AsyncMock(return_value=[1.0, 0.0, 0.0])
+
+    service = VideoRAGService(
+        engine=engine,
+        vectorizer=fake_vectorizer,
+        vector_size=3,
+    )
+
+    results = asyncio.run(
+        service.search("Felinos", limit=3, rerank=False)
+    )
+    assert [r.chunk_index for r in results] == [66, 48, 12]
+    assert results[1].start_time == pytest.approx(115.3)
+    assert results[1].end_time == pytest.approx(120.5)
+    assert results[1].transcript == shared_tr
+
 
 
 

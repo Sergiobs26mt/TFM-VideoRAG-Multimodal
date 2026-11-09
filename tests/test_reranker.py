@@ -424,5 +424,76 @@ def test_rerank_combines_distinct_cached_keyframes_into_vertical_collage(
     assert decoded.shape == (180, 80, 3)
 
 
+def test_rerank_injects_bimodal_instructions_and_candidate_transcripts(
+    mock_genai_client: MagicMock, tmp_path: Path
+) -> None:
+    reranker = MultimodalReranker(api_key="fake-key")
+    c_with_audio = SearchResult(
+        score=0.44,
+        video_name="python_tutorial.mp4",
+        chunk_index=12,
+        start_time=61.1,
+        end_time=68.0,
+        transcript="Ahora definimos un diccionario con llaves clave y valor.",
+    )
+    c_silent = SearchResult(
+        score=0.41,
+        video_name="python_tutorial.mp4",
+        chunk_index=13,
+        start_time=68.0,
+        end_time=72.0,
+        transcript=None,
+    )
+
+    dummy_frame = np.zeros((60, 80, 3), dtype=np.uint8)
+    mock_response = MagicMock()
+    mock_response.text = json.dumps(
+        [
+            {
+                "candidate_index": 0,
+                "is_relevant": True,
+                "relevance_score": 0.96,
+                "reasoning": "La locución explica diccionarios.",
+            },
+            {
+                "candidate_index": 1,
+                "is_relevant": False,
+                "relevance_score": 0.10,
+                "reasoning": "Sin relación con diccionarios.",
+            },
+        ]
+    )
+    mock_genai_client.aio.models.generate_content.return_value = mock_response
+
+    with patch(
+        "src.rag_engine.reranker.extract_interval_frames", return_value=[dummy_frame]
+    ):
+        reranked = asyncio.run(
+            reranker.rerank(
+                "Diccionarios",
+                [c_with_audio, c_silent],
+                raw_dir=tmp_path / "raw",
+                processed_dir=tmp_path / "processed",
+            )
+        )
+
+    assert len(reranked) == 2
+    assert reranked[0].is_relevant is True
+    assert reranked[0].transcript == (
+        "Ahora definimos un diccionario con llaves clave y valor."
+    )
+
+    sent_contents = mock_genai_client.aio.models.generate_content.call_args.kwargs[
+        "contents"
+    ]
+    text_segments = "\n".join(p for p in sent_contents if isinstance(p, str))
+    assert (
+        "Transcripción hablada en este segmento: "
+        "Ahora definimos un diccionario con llaves clave y valor."
+    ) in text_segments
+    assert "Transcripción hablada: [Sin locución detectada]" in text_segments
+    assert "bimodal" in text_segments.lower()
+
+
 
 

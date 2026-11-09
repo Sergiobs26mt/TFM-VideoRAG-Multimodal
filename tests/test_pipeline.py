@@ -11,6 +11,7 @@ import pytest
 from src.config import MAX_CHUNKS_PER_VIDEO
 from src.models import (
     QuotaSafetyError,
+    TranscriptSegment,
     VectorizationError,
     VectorizedChunk,
     VideoChunk,
@@ -48,7 +49,13 @@ class _FakeVectorizer:
         cls.active -= 1
         if chunk.index == cls.fail_index:
             raise VectorizationError("fallo simulado")
-        return VectorizedChunk(chunk.index, chunk.start_time, chunk.end_time, [float(chunk.index)])
+        return VectorizedChunk(
+            chunk.index,
+            chunk.start_time,
+            chunk.end_time,
+            [float(chunk.index)],
+            transcript=chunk.transcript,
+        )
 
 
 @pytest.fixture(autouse=True)
@@ -57,6 +64,9 @@ def _patch(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     _FakeVectorizer.fail_index = None
     monkeypatch.setattr(pipeline, "GeminiMultimodalVectorizer", _FakeVectorizer)
     monkeypatch.setattr(pipeline, "PROCESSED_DIR", tmp_path / "processed")
+    monkeypatch.setattr(
+        pipeline, "transcribe_video_audio", lambda *_, **__: []
+    )
 
 
 def test_pipeline_orders_and_limits_concurrency(tmp_path: Path) -> None:
@@ -120,3 +130,73 @@ def test_pipeline_allows_exactly_limit(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     result = asyncio.run(pipeline.process_video_pipeline("x.mp4", max_concurrent_requests=50))
     assert len(result) == MAX_CHUNKS_PER_VIDEO
+
+
+def test_pipeline_enriches_chunks_with_aligned_audio(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_chunks = [
+        VideoChunk(0, 0, 9, 0.0, 2.0),
+        VideoChunk(1, 10, 19, 2.0, 4.0),
+    ]
+    fake_frames = {0: [np.zeros((2, 2, 3), np.uint8)] * 3, 1: [np.zeros((2, 2, 3), np.uint8)] * 3}
+    monkeypatch.setattr(
+        pipeline, "process_video_single_pass", lambda *_: (fake_chunks, fake_frames)
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "transcribe_video_audio",
+        lambda path, model: [
+            TranscriptSegment(start_time=0.2, end_time=1.5, text="Explicación inicial")
+        ],
+    )
+
+    result = asyncio.run(
+        pipeline.process_video_pipeline("x.mp4", enable_audio=True, whisper_model="tiny")
+    )
+    assert len(result) == 2
+    assert result[0].transcript == "Explicación inicial"
+    assert result[1].transcript is None
+
+
+def test_pipeline_degrades_gracefully_when_audio_fails(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    fake_chunks = [VideoChunk(0, 0, 9, 0.0, 2.0)]
+    fake_frames = {0: [np.zeros((2, 2, 3), np.uint8)] * 3}
+    monkeypatch.setattr(
+        pipeline, "process_video_single_pass", lambda *_: (fake_chunks, fake_frames)
+    )
+
+    def broken_audio(*_: Any, **__: Any) -> list[TranscriptSegment]:
+        raise RuntimeError("ffmpeg no disponible")
+
+    monkeypatch.setattr(pipeline, "transcribe_video_audio", broken_audio)
+
+    with caplog.at_level("WARNING"):
+        result = asyncio.run(pipeline.process_video_pipeline("x.mp4", enable_audio=True))
+
+    assert len(result) == 1
+    assert result[0].transcript is None
+    assert "continuando solo con modalidad visual" in caplog.text
+
+
+def test_pipeline_skips_audio_when_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_chunks = [VideoChunk(0, 0, 9, 0.0, 2.0)]
+    fake_frames = {0: [np.zeros((2, 2, 3), np.uint8)] * 3}
+    monkeypatch.setattr(
+        pipeline, "process_video_single_pass", lambda *_: (fake_chunks, fake_frames)
+    )
+    called = {"audio": False}
+
+    def track_audio(*_: Any, **__: Any) -> list[TranscriptSegment]:
+        called["audio"] = True
+        return []
+
+    monkeypatch.setattr(pipeline, "transcribe_video_audio", track_audio)
+
+    result = asyncio.run(pipeline.process_video_pipeline("x.mp4", enable_audio=False))
+    assert len(result) == 1
+    assert called["audio"] is False
