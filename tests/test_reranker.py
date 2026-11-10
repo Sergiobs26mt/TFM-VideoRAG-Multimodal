@@ -495,5 +495,63 @@ def test_rerank_injects_bimodal_instructions_and_candidate_transcripts(
     assert "bimodal" in text_segments.lower()
 
 
+def test_rerank_includes_query_images_for_image_only_and_hybrid_queries(
+    mock_genai_client: MagicMock, tmp_path: Path
+) -> None:
+    import cv2
+
+    reranker = MultimodalReranker(api_key="fake-key", target_width=128)
+    c0 = _make_candidate(0.50, 4, 10.0, 15.0, video_name="animals.mp4")
+
+    ok, png_buf = cv2.imencode(".png", np.full((200, 300, 3), 80, dtype=np.uint8))
+    assert ok
+    query_png_bytes = png_buf.tobytes()
+
+    dummy_frame = np.zeros((60, 80, 3), dtype=np.uint8)
+    mock_response = MagicMock()
+    mock_response.text = json.dumps(
+        [
+            {
+                "candidate_index": 0,
+                "is_relevant": True,
+                "relevance_score": 0.94,
+                "reasoning": "Coincide visualmente con la imagen de referencia.",
+            }
+        ]
+    )
+    mock_genai_client.aio.models.generate_content.return_value = mock_response
+
+    with patch(
+        "src.rag_engine.reranker.extract_interval_frames", return_value=[dummy_frame]
+    ):
+        reranked = asyncio.run(
+            reranker.rerank(
+                "",
+                [c0],
+                raw_dir=tmp_path / "raw",
+                processed_dir=tmp_path / "processed",
+                query_images=[query_png_bytes],
+            )
+        )
+
+    assert len(reranked) == 1
+    assert reranked[0].is_relevant is True
+    sent_contents = mock_genai_client.aio.models.generate_content.call_args.kwargs[
+        "contents"
+    ]
+    text_segments = "\n".join(p for p in sent_contents if isinstance(p, str))
+    assert "Imágenes de referencia de la consulta" in text_segments
+    image_parts = [p for p in sent_contents if isinstance(p, types.Part)]
+    # 1 imagen de referencia + 1 fotograma del candidato 0
+    assert len(image_parts) == 2
+    ref_decoded = cv2.imdecode(
+        np.frombuffer(image_parts[0].inline_data.data, dtype=np.uint8),  # type: ignore[arg-type, union-attr]
+        cv2.IMREAD_COLOR,
+    )
+    assert ref_decoded is not None
+    assert ref_decoded.shape[1] == 128
+
+
+
 
 

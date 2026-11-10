@@ -62,3 +62,27 @@ def test_restores_logging_and_logs_exception(tmp_path: Path) -> None:
 def test_run_dir_outside_context() -> None:
     with pytest.raises(RuntimeError):
         _ = RunAuditor().run_dir
+
+
+def test_save_search_results_includes_modality_summary_when_provided(
+    tmp_path: Path,
+) -> None:
+    summary = {
+        "has_text": True,
+        "txt_count": 1,
+        "image_count": 2,
+        "audio_count": 1,
+        "audio_transcript_count": 1,
+        "composed_text": "león en la sabana",
+    }
+    with RunAuditor(tmp_path) as auditor:
+        auditor.save_search_results(
+            "león en la sabana",
+            [_Res(0.88, 4.0)],
+            modality_summary=summary,
+        )
+        run_dir = auditor.run_dir
+
+    search = json.loads((run_dir / "search_results.json").read_text(encoding="utf-8"))
+    assert search["searches"][0]["modalities"] == summary
+

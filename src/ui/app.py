@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import atexit
 import logging
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,7 @@ from src.config import (
     build_run_config,
 )
 from src.models import (
+    MultimodalQuery,
     QuotaSafetyError,
     RerankedResult,
     SearchResult,
@@ -62,8 +64,63 @@ def get_rag_service() -> VideoRAGService:
     )
 
 
+def _extract_uploaded_bytes(item: Any) -> bytes:
+    """Extrae los bytes en memoria de un widget de subida o grabación de Streamlit."""
+    if isinstance(item, bytes):
+        return item
+    if hasattr(item, "getvalue"):
+        return bytes(item.getvalue())
+    if hasattr(item, "read"):
+        return bytes(item.read())
+    return b""
+
+
+def build_ui_multimodal_query(
+    text_input: str = "",
+    uploaded_txts: Sequence[Any] | None = None,
+    uploaded_images: Sequence[Any] | None = None,
+    recorded_audio: Any | None = None,
+    uploaded_audios: Sequence[Any] | None = None,
+) -> MultimodalQuery:
+    """Construye un ``MultimodalQuery`` inmutable a partir de los controles de la UI."""
+    cleaned_text = text_input.strip() if text_input and text_input.strip() else None
+
+    txt_list: list[str] = []
+    if uploaded_txts:
+        for txt_item in uploaded_txts:
+            raw = _extract_uploaded_bytes(txt_item)
+            decoded = raw.decode("utf-8", errors="replace").strip()
+            if decoded:
+                txt_list.append(decoded)
+
+    img_list: list[bytes] = []
+    if uploaded_images:
+        for img_item in uploaded_images:
+            raw = _extract_uploaded_bytes(img_item)
+            if raw:
+                img_list.append(raw)
+
+    audio_list: list[bytes] = []
+    if recorded_audio is not None:
+        mic_bytes = _extract_uploaded_bytes(recorded_audio)
+        if mic_bytes:
+            audio_list.append(mic_bytes)
+    if uploaded_audios:
+        for aud_item in uploaded_audios:
+            raw = _extract_uploaded_bytes(aud_item)
+            if raw:
+                audio_list.append(raw)
+
+    return MultimodalQuery(
+        text=cleaned_text,
+        txt_contents=tuple(txt_list),
+        images=tuple(img_list),
+        audio_bytes=tuple(audio_list),
+    )
+
+
 async def execute_search(
-    query: str,
+    query: str | MultimodalQuery,
     service: VideoRAGService,
     limit: int,
     video_filter: str | None = None,
@@ -448,6 +505,8 @@ def main() -> None:
         st.session_state["last_results"] = []
     if "last_query" not in st.session_state:
         st.session_state["last_query"] = ""
+    if "last_audio_transcripts" not in st.session_state:
+        st.session_state["last_audio_transcripts"] = []
 
     col_left, col_right = st.columns([1.1, 0.9], gap="large")
 
@@ -474,47 +533,141 @@ def main() -> None:
             )
 
     with col_right:
-        st.subheader("Consulta en Lenguaje Natural")
+        st.subheader("Consulta en Lenguaje Natural y Multimodal")
 
         query_input = st.text_input(
             "¿Qué momento o evento deseas localizar?",
             placeholder="Ej: un león rugiendo, bucles for, pingüinos en el agua...",
-            help="Escribe en lenguaje natural. Se transformará en un embedding semántico denso.",
+            help="Escribe en lenguaje natural o combina tu consulta con audio, imágenes y archivos .txt.",
             disabled=active_video is None,
         )
 
-        col_btn1, _ = st.columns([0.4, 0.6])
-        search_clicked = col_btn1.button(
+        col_btn_search, col_btn_audio, col_btn_media = st.columns([0.38, 0.30, 0.32])
+        search_clicked = col_btn_search.button(
             "Buscar Evento",
             type="primary",
             use_container_width=True,
             disabled=active_video is None,
         )
 
-        if search_clicked and query_input.strip():
-            st.session_state["last_query"] = query_input.strip()
-            video_filter = active_video if filter_by_selected else None
-
-            spinner_msg = (
-                "Etapa 1: Búsqueda vectorial + Etapa 2: Verificación visual con Gemini 3.5 Flash Lite..."
-                if enable_reranker
-                else "Generando embedding de texto y consultando Qdrant..."
+        with col_btn_audio.popover(
+            "Audio",
+            use_container_width=True,
+            disabled=active_video is None,
+        ):
+            recorded_audio = st.audio_input(
+                "Grabar voz desde el micrófono",
+                key="query_mic_audio",
             )
-            with st.spinner(spinner_msg):
-                try:
-                    results = asyncio.run(
-                        execute_search(
-                            query=query_input.strip(),
-                            service=service,
-                            limit=top_k,
-                            video_filter=video_filter,
-                            auditor=auditor,
-                            use_reranker=enable_reranker,
+            uploaded_audios = st.file_uploader(
+                "Subir pistas de audio (.wav, .mp3, .m4a, .ogg)",
+                type=["wav", "mp3", "m4a", "ogg"],
+                accept_multiple_files=True,
+                key="query_uploaded_audios",
+            )
+
+        with col_btn_media.popover(
+            "Imágenes / .txt",
+            use_container_width=True,
+            disabled=active_video is None,
+        ):
+            uploaded_images = st.file_uploader(
+                "Subir imágenes de referencia (.png, .jpg, .jpeg, .webp)",
+                type=["png", "jpg", "jpeg", "webp"],
+                accept_multiple_files=True,
+                key="query_uploaded_images",
+            )
+            uploaded_txts = st.file_uploader(
+                "Subir archivos de texto (.txt)",
+                type=["txt"],
+                accept_multiple_files=True,
+                key="query_uploaded_txts",
+            )
+
+        ui_query = build_ui_multimodal_query(
+            text_input=query_input,
+            uploaded_txts=uploaded_txts,
+            uploaded_images=uploaded_images,
+            recorded_audio=recorded_audio,
+            uploaded_audios=uploaded_audios,
+        )
+
+        if search_clicked:
+            if not ui_query.has_content:
+                st.warning(
+                    "Introduce una consulta de texto o adjunta al menos una imagen, un audio o un archivo .txt."
+                )
+            else:
+                video_filter = active_video if filter_by_selected else None
+                spinner_msg = (
+                    "Etapa 1: Vectorización multimodal + Etapa 2: Verificación bimodal con Gemini 3.5 Flash Lite..."
+                    if enable_reranker
+                    else "Generando embedding multimodal unificado y consultando Qdrant..."
+                )
+                with st.spinner(spinner_msg):
+                    try:
+                        results = asyncio.run(
+                            execute_search(
+                                query=ui_query,
+                                service=service,
+                                limit=top_k,
+                                video_filter=video_filter,
+                                auditor=auditor,
+                                use_reranker=enable_reranker,
+                            )
                         )
+                        resolved = getattr(service, "last_resolved_query", None)
+                        if isinstance(resolved, MultimodalQuery):
+                            st.session_state["last_audio_transcripts"] = list(
+                                resolved.audio_transcripts
+                            )
+                            display_label = (
+                                resolved.composed_text
+                                if resolved.composed_text
+                                else f"[{len(resolved.images)} imagen(es) de referencia]"
+                            )
+                        else:
+                            st.session_state["last_audio_transcripts"] = []
+                            display_label = (
+                                ui_query.composed_text
+                                or f"[{len(ui_query.images)} imagen(es) de referencia]"
+                            )
+                        st.session_state["last_query"] = display_label
+                        st.session_state["last_results"] = results
+                    except ValueError as exc:
+                        st.warning(f"Consulta no válida: {exc}")
+                    except (VectorizationError, VectorDBError, OSError) as exc:
+                        st.error(f"Error al realizar la búsqueda: {exc}")
+
+        has_attachments = bool(
+            ui_query.images or ui_query.audio_bytes or ui_query.txt_contents
+        )
+        if has_attachments:
+            with st.container(border=True):
+                st.caption("**Adjuntos multimodales activos en la consulta:**")
+                if ui_query.images:
+                    img_cols = st.columns(min(len(ui_query.images), 4))
+                    for idx, img_bytes in enumerate(ui_query.images):
+                        img_cols[idx % len(img_cols)].image(
+                            img_bytes,
+                            caption=f"Imagen {idx + 1}",
+                            width=110,
+                        )
+                if ui_query.audio_bytes:
+                    for idx, aud_bytes in enumerate(ui_query.audio_bytes):
+                        st.audio(aud_bytes)
+                    detected_trs: list[str] = st.session_state.get(
+                        "last_audio_transcripts", []
                     )
-                    st.session_state["last_results"] = results
-                except (VectorizationError, VectorDBError, ValueError, OSError) as exc:
-                    st.error(f"Error al realizar la búsqueda: {exc}")
+                    if detected_trs:
+                        st.caption(
+                            f"**Transcripción detectada del audio:** \"{' '.join(detected_trs)}\""
+                        )
+                if ui_query.txt_contents:
+                    st.caption(
+                        f"**Archivos .txt ({len(ui_query.txt_contents)}):** "
+                        f"\"{' '.join(ui_query.txt_contents)[:160]}\""
+                    )
 
         last_results: list[Any] = st.session_state.get("last_results", [])
         last_query = st.session_state.get("last_query", "")

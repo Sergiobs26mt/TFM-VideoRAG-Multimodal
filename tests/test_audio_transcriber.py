@@ -15,6 +15,7 @@ from src.processing.audio_transcriber import (
     align_transcript_with_chunks,
     extract_audio_track,
     transcribe_audio,
+    transcribe_query_audios,
     transcribe_video_audio,
 )
 
@@ -223,3 +224,82 @@ def test_align_transcript_with_chunks_handles_containment_boundary_overlap_and_s
     )
     assert aligned[1].transcript == "Hoy veremos diccionarios."
     assert aligned[2].transcript is None
+
+
+def test_transcribe_query_audios_supports_paths_and_bytes_and_cleans_temps(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    audio_file = tmp_path / "voice.mp3"
+    audio_file.write_bytes(b"ID3-fake-mp3")
+    created_wavs: list[Path] = []
+
+    def fake_extract(
+        source_path: str | Path, output_wav: Path | None = None
+    ) -> Path | None:
+        assert Path(source_path).is_file()
+        wav = tmp_path / f"conv_{len(created_wavs)}.wav"
+        wav.write_bytes(b"RIFF-16k")
+        created_wavs.append(wav)
+        return wav
+
+    monkeypatch.setattr(audio_transcriber, "extract_audio_track", fake_extract)
+
+    calls: list[str] = []
+
+    def fake_transcriber(
+        path: str, model_name: str, language: str | None
+    ) -> list[dict[str, Any]]:
+        calls.append(path)
+        if len(calls) == 1:
+            return [
+                {"start": 0.0, "end": 1.5, "text": "busca un"},
+                {"start": 1.5, "end": 3.0, "text": "camaleón verde"},
+            ]
+        return [{"start": 0.0, "end": 2.0, "text": "en la rama"}]
+
+    transcripts = transcribe_query_audios(
+        [audio_file, b"RIFF-mic-recording"],
+        transcriber_fn=fake_transcriber,
+    )
+    assert transcripts == ["busca un camaleón verde", "en la rama"]
+    assert len(created_wavs) == 2
+    for wav in created_wavs:
+        assert not wav.exists()
+
+
+def test_transcribe_query_audios_degrades_gracefully_on_silence_or_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    valid_audio = tmp_path / "ok.wav"
+    valid_audio.write_bytes(b"RIFF-ok")
+    silent_audio = tmp_path / "silent.ogg"
+    silent_audio.write_bytes(b"OggS-silent")
+    missing_audio = tmp_path / "missing.m4a"
+
+    def fake_extract(
+        source_path: str | Path, output_wav: Path | None = None
+    ) -> Path | None:
+        src = Path(source_path)
+        if not src.is_file():
+            raise FileNotFoundError(str(src))
+        if src.name == "silent.ogg":
+            return None
+        wav = tmp_path / f"wav_{src.stem}.wav"
+        wav.write_bytes(b"RIFF-16k")
+        return wav
+
+    monkeypatch.setattr(audio_transcriber, "extract_audio_track", fake_extract)
+
+    def fake_transcriber(
+        path: str, model_name: str, language: str | None
+    ) -> list[dict[str, Any]]:
+        if "ok" in path:
+            return [{"start": 0.0, "end": 1.0, "text": "bucles for"}]
+        raise AudioTranscriptionError("corrupto")
+
+    result = transcribe_query_audios(
+        [missing_audio, silent_audio, b"", b"corrupt-bytes", valid_audio],
+        transcriber_fn=fake_transcriber,
+    )
+    assert result == ["bucles for"]
+

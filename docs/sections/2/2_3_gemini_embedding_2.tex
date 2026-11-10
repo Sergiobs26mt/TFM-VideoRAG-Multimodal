@@ -88,7 +88,7 @@ La Figura~\ref{fig:gemini_ingest_modes} ilustra y compara ambos flujos de acopla
 \label{fig:gemini_ingest_modes}
 \end{figure}
 
-Asimismo, para cerrar el ciclo de búsqueda cruzada, el mismo componente vectorizador expone un método asimétrico de consulta textual (\texttt{embed\_text}), el cual envía la cadena de búsqueda del usuario directamente al mismo punto de enlace (\texttt{aio.models.embed\_content}) aplicando idéntica configuración dimensional (\texttt{output\_dimensionality}) y normalización $L_2$, asegurando la compatibilidad algebraica exacta entre los fragmentos de vídeo indexados y las preguntas en lenguaje natural \cite{gemini_emb2_docs}. %[cite: 3]
+Asimismo, para cerrar el ciclo de búsqueda cruzada y multimodal, el mismo componente vectorizador expone el método \texttt{embed\_query} (respaldado por \texttt{build\_query\_payload} y manteniendo \texttt{embed\_text} por retrocompatibilidad), capaz de empaquetar en un único contenedor \texttt{types.Content} cualquier combinación de consulta textual, ficheros \texttt{.txt}, imágenes de referencia codificadas a JPEG (\texttt{types.Part.from\_bytes}) y transcripciones de pistas de audio de entrada obtenidas con \texttt{transcribe\_query\_audios}. Al invocar \texttt{aio.models.embed\_content} en una sola llamada de red con idéntica configuración dimensional (\texttt{output\_dimensionality}) y normalización $L_2$, el sistema garantiza la compatibilidad algebraica exacta entre los fragmentos de vídeo indexados y las consultas multimodales del usuario \cite{gemini_emb2_docs}. %[cite: 3]
 
 \subsubsection{Modelado Matemático de Cuotas Operativas (RPM, TPM y RPD) y Planificación de Capacidad}
 \label{subsubsec:modelado_cuotas_capacidad}

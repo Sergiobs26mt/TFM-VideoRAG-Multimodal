@@ -4,7 +4,7 @@ import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from src.models import SearchResult
+from src.models import MultimodalQuery, SearchResult
 from src.ui import app as ui_app
 
 
@@ -159,4 +159,65 @@ def test_execute_search_truncates_to_limit() -> None:
         ui_app.execute_search(query="bucles", service=mock_service, limit=3)
     )
     assert len(results) == 3
+
+
+def test_build_ui_multimodal_query_combines_text_txt_images_and_audio() -> None:
+    fake_txt = MagicMock()
+    fake_txt.getvalue.return_value = b"archivo de texto"
+
+    fake_img = MagicMock()
+    fake_img.getvalue.return_value = b"fake-jpeg-bytes"
+
+    fake_mic = MagicMock()
+    fake_mic.getvalue.return_value = b"RIFF-mic"
+
+    fake_audio_file = MagicMock()
+    fake_audio_file.getvalue.return_value = b"ID3-mp3"
+
+    mquery = ui_app.build_ui_multimodal_query(
+        text_input="  consulta base ",
+        uploaded_txts=[fake_txt],
+        uploaded_images=[fake_img],
+        recorded_audio=fake_mic,
+        uploaded_audios=[fake_audio_file],
+    )
+    assert isinstance(mquery, MultimodalQuery)
+    assert mquery.has_content
+    assert mquery.text == "consulta base"
+    assert mquery.txt_contents == ("archivo de texto",)
+    assert mquery.images == (b"fake-jpeg-bytes",)
+    assert mquery.audio_bytes == (b"RIFF-mic", b"ID3-mp3")
+
+
+def test_execute_search_accepts_multimodal_query() -> None:
+    fake_results = [
+        SearchResult(
+            score=0.91,
+            video_name="animals.mp4",
+            chunk_index=0,
+            start_time=0.0,
+            end_time=4.0,
+        )
+    ]
+    mock_service = MagicMock()
+    mock_service.search = AsyncMock(return_value=fake_results)
+
+    mquery = MultimodalQuery(images=(b"fake-img",))
+    results = asyncio.run(
+        ui_app.execute_search(
+            query=mquery,
+            service=mock_service,
+            limit=2,
+            video_filter="animals.mp4",
+        )
+    )
+    assert results == fake_results
+    mock_service.search.assert_called_once_with(
+        mquery,
+        limit=2,
+        video_filter="animals.mp4",
+        rerank=True,
+        auditor=None,
+    )
+
 

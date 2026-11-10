@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import logging
+from typing import cast
 
+import cv2
 import numpy as np
 from google.genai import types
 from numpy.typing import NDArray
 
 from src.config import EMBEDDING_MODEL, VECTOR_SIZE, VectorizerConfig
-from src.models import VectorizationError, VectorizedChunk, VideoChunk
+from src.models import MultimodalQuery, VectorizationError, VectorizedChunk, VideoChunk
 from src.processing.video_chunker import encode_frame_jpeg
 from src.utils.gemini_client import call_with_retry, create_gemini_client
 
@@ -86,11 +88,49 @@ class GeminiMultimodalVectorizer:
             transcript=chunk.transcript,
         )
 
+    def build_query_payload(
+        self,
+        query: str | MultimodalQuery,
+    ) -> types.Content:
+        """Empaqueta imágenes y texto compuesto de la consulta en un único ``Content``."""
+        mquery = MultimodalQuery(text=query) if isinstance(query, str) else query
+        parts: list[types.Part] = []
+
+        for img_bytes in mquery.images:
+            buf = np.frombuffer(img_bytes, dtype=np.uint8)
+            decoded = cv2.imdecode(buf, cv2.IMREAD_COLOR)
+            if decoded is None:
+                raise ValueError("Imagen de consulta no válida o corrupta.")
+            jpeg_bytes = encode_frame_jpeg(
+                cast("NDArray[np.uint8]", decoded),
+                jpeg_quality=self._jpeg_quality,
+                target_width=self._target_width,
+            )
+            parts.append(
+                types.Part.from_bytes(
+                    data=jpeg_bytes,
+                    mime_type="image/jpeg",
+                )
+            )
+
+        composed = mquery.composed_text
+        if composed:
+            parts.append(types.Part.from_text(text=composed))
+
+        if not parts:
+            raise ValueError(
+                "La consulta no contiene texto ni imágenes válidas para vectorizar."
+            )
+        return types.Content(parts=parts)
+
+    async def embed_query(self, query: str | MultimodalQuery) -> list[float]:
+        """Genera de forma asíncrona el embedding unificado de una consulta multimodal."""
+        payload = self.build_query_payload(query)
+        return await self._embed(payload, "consulta multimodal")
+
     async def embed_text(self, text: str) -> list[float]:
         """Genera de forma asíncrona el embedding de una consulta de solo texto."""
-        if not text.strip():
-            raise ValueError("La consulta de texto no puede estar vacía.")
-        return await self._embed(text, "consulta de texto")
+        return await self.embed_query(text)
 
     async def _embed(self, contents: types.Content | str, label: str) -> list[float]:
         """Llama a la API de embeddings con reintentos y backoff exponencial."""

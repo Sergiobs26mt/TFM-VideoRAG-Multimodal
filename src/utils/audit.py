@@ -127,7 +127,12 @@ class RunAuditor:
         """
         return self._write_json("run_config.json", config)
 
-    def save_search_results(self, query: str, results: list[Any]) -> Path:
+    def save_search_results(
+        self,
+        query: str,
+        results: list[Any],
+        modality_summary: dict[str, Any] | None = None,
+    ) -> Path:
         """Añade una búsqueda a ``search_results.json`` (acumula todas las del run).
 
         El fichero contiene ``{"searches": [{"query": ..., "results": [...]}, ...]}``
@@ -137,6 +142,7 @@ class RunAuditor:
         Args:
             query: Texto de la consulta del usuario.
             results: Resultados devueltos por Qdrant (dataclasses o dicts).
+            modality_summary: Resumen opcional de modalidades empleadas en la búsqueda.
 
         Returns:
             Ruta del fichero escrito.
@@ -145,7 +151,10 @@ class RunAuditor:
             asdict(r) if is_dataclass(r) and not isinstance(r, type) else r
             for r in results
         ]
-        self._searches.append({"query": query, "results": serialized})
+        entry: dict[str, Any] = {"query": query, "results": serialized}
+        if modality_summary is not None:
+            entry["modalities"] = modality_summary
+        self._searches.append(entry)
         return self._write_json("search_results.json", {"searches": self._searches})
 
     def _create_run_dir(self) -> Path:

@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
+import inspect
 import logging
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+from dataclasses import replace
 from pathlib import Path
+from typing import cast
 
 from src.config import (
     DB_PATH,
@@ -17,7 +22,13 @@ from src.config import (
     SearchConfig,
 )
 from src.embeddings.gemini_vectorizer import GeminiMultimodalVectorizer
-from src.models import RerankedResult, SearchResult, VectorizationError
+from src.models import (
+    MultimodalQuery,
+    RerankedResult,
+    SearchResult,
+    VectorizationError,
+)
+from src.processing.audio_transcriber import transcribe_query_audios
 from src.processing.pipeline import process_video_pipeline
 from src.rag_engine.reranker import MultimodalReranker
 from src.rag_engine.vector_db import QdrantSearchEngine
@@ -141,6 +152,7 @@ class VideoRAGService:
         self._vector_size = vector_size
         self._reranker_model = reranker_model
         self._query_cache: dict[str, list[float]] = {}
+        self.last_resolved_query: MultimodalQuery | None = None
 
     def _get_vectorizer(self) -> GeminiMultimodalVectorizer:
         if self._vectorizer is None:
@@ -206,15 +218,116 @@ class VideoRAGService:
         logger.info("Indexación completada: %d chunks", inserted)
         return inserted
 
+    @staticmethod
+    def _build_query_cache_key(mquery: MultimodalQuery) -> str:
+        """Calcula una clave SHA-256 determinista sobre texto compuesto, imágenes y audios."""
+        hasher = hashlib.sha256()
+        hasher.update(b"text:")
+        hasher.update(mquery.composed_text.encode("utf-8"))
+        for img in mquery.images:
+            hasher.update(b"|img:")
+            hasher.update(hashlib.sha256(img).digest())
+        for aud_bytes in mquery.audio_bytes:
+            hasher.update(b"|aud_bytes:")
+            hasher.update(hashlib.sha256(aud_bytes).digest())
+        for aud_path in mquery.audio_paths:
+            hasher.update(b"|aud_path:")
+            if aud_path.is_file():
+                hasher.update(hashlib.sha256(aud_path.read_bytes()).digest())
+            else:
+                hasher.update(str(aud_path).encode("utf-8"))
+        return hasher.hexdigest()
+
+    async def _resolve_multimodal_query(
+        self,
+        query: str | MultimodalQuery,
+        *,
+        txt_files: Sequence[str | Path | bytes] | None = None,
+        image_files: Sequence[str | Path | bytes] | None = None,
+        audio_files: Sequence[str | Path | bytes] | None = None,
+        whisper_model: str = WHISPER_MODEL,
+    ) -> MultimodalQuery:
+        """Unifica adjuntos y transcribe las pistas de audio de consulta."""
+        base = MultimodalQuery(text=query) if isinstance(query, str) else query
+
+        extra_txts: list[str] = list(base.txt_contents)
+        if txt_files:
+            for item in txt_files:
+                if isinstance(item, bytes):
+                    extra_txts.append(item.decode("utf-8", errors="replace"))
+                else:
+                    extra_txts.append(Path(item).read_text(encoding="utf-8"))
+
+        extra_imgs: list[bytes] = list(base.images)
+        if image_files:
+            for item in image_files:
+                if isinstance(item, bytes):
+                    extra_imgs.append(item)
+                else:
+                    extra_imgs.append(Path(item).read_bytes())
+
+        extra_audio_paths: list[Path] = list(base.audio_paths)
+        extra_audio_bytes: list[bytes] = list(base.audio_bytes)
+        if audio_files:
+            for item in audio_files:
+                if isinstance(item, bytes):
+                    extra_audio_bytes.append(item)
+                else:
+                    extra_audio_paths.append(Path(item))
+
+        mquery = replace(
+            base,
+            txt_contents=tuple(extra_txts),
+            images=tuple(extra_imgs),
+            audio_paths=tuple(extra_audio_paths),
+            audio_bytes=tuple(extra_audio_bytes),
+        )
+        if not mquery.has_content:
+            raise ValueError("La consulta de búsqueda no puede estar vacía.")
+
+        audio_inputs: list[str | Path | bytes] = [
+            *mquery.audio_paths,
+            *mquery.audio_bytes,
+        ]
+        if audio_inputs:
+            transcribed = await asyncio.to_thread(
+                transcribe_query_audios,
+                audio_inputs,
+                model_name=whisper_model,
+            )
+            mquery = replace(
+                mquery,
+                audio_transcripts=(*mquery.audio_transcripts, *transcribed),
+            )
+
+        if not mquery.composed_text and not mquery.images:
+            raise ValueError(
+                "El audio de consulta está en silencio o no contiene locución "
+                "reconocible, y no se aportaron texto ni imágenes."
+            )
+        return mquery
+
+    async def _embed_multimodal_query(self, mquery: MultimodalQuery) -> list[float]:
+        """Invoca ``embed_query`` o delega en ``embed_text`` si un mock solo define este último."""
+        vectorizer = self._get_vectorizer()
+        embed_query_fn = getattr(vectorizer, "embed_query", None)
+        if embed_query_fn is not None and inspect.iscoroutinefunction(embed_query_fn):
+            return cast("list[float]", await embed_query_fn(mquery))
+        return await vectorizer.embed_text(mquery.composed_text)
+
     async def search(
         self,
-        query: str,
+        query: str | MultimodalQuery = "",
         *,
         limit: int = 5,
         video_filter: str | None = None,
         rerank: bool = True,
         oversample_factor: int = 2,
         auditor: RunAuditor | None = None,
+        txt_files: Sequence[str | Path | bytes] | None = None,
+        image_files: Sequence[str | Path | bytes] | None = None,
+        audio_files: Sequence[str | Path | bytes] | None = None,
+        whisper_model: str = WHISPER_MODEL,
     ) -> list[SearchResult] | list[RerankedResult]:
         """Ejecuta la recuperación en dos etapas (Qdrant + VLM opcional) y registra auditoría."""
         cfg = SearchConfig(
@@ -223,16 +336,25 @@ class VideoRAGService:
         if oversample_factor < 1:
             raise ValueError("oversample_factor debe ser >= 1.")
 
+        mquery = await self._resolve_multimodal_query(
+            query,
+            txt_files=txt_files,
+            image_files=image_files,
+            audio_files=audio_files,
+            whisper_model=whisper_model,
+        )
+        self.last_resolved_query = mquery
+
         fetch_k = (
             max(cfg.top_k, min(cfg.top_k * oversample_factor, 10))
             if cfg.rerank
             else cfg.top_k
         )
         raw_fetch_k = max(fetch_k * 3, 25)
-        cache_key = query.strip()
+        cache_key = self._build_query_cache_key(mquery)
         query_vector = self._query_cache.get(cache_key)
         if query_vector is None:
-            query_vector = await self._get_vectorizer().embed_text(query)
+            query_vector = await self._embed_multimodal_query(mquery)
             self._query_cache[cache_key] = query_vector
         raw_candidates = self.engine.search_event(
             query_vector, limit=raw_fetch_k, video_name=video_filter
@@ -242,11 +364,16 @@ class VideoRAGService:
         final_results: list[SearchResult] | list[RerankedResult] = candidates[: cfg.top_k]
         if cfg.rerank and candidates:
             try:
+                rerank_kwargs: dict[str, object] = {
+                    "raw_dir": self._raw_dir,
+                    "processed_dir": self._processed_dir,
+                }
+                if mquery.images:
+                    rerank_kwargs["query_images"] = mquery.images
                 reranked = await self._get_reranker().rerank(
-                    query,
+                    mquery.composed_text,
                     candidates,
-                    raw_dir=self._raw_dir,
-                    processed_dir=self._processed_dir,
+                    **rerank_kwargs,  # type: ignore[arg-type]
                 )
                 final_results = reranked[: cfg.top_k]
             except (VectorizationError, ValueError, RuntimeError, OSError) as exc:
@@ -256,7 +383,11 @@ class VideoRAGService:
                 )
 
         if auditor is not None:
-            auditor.save_search_results(query, list(final_results))
+            auditor.save_search_results(
+                mquery.composed_text or "[consulta visual]",
+                list(final_results),
+                modality_summary=mquery.modality_summary,
+            )
         return final_results
 
     def get_indexed_videos(self) -> list[str]:

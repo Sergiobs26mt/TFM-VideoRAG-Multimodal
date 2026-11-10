@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
 
 class QuotaSafetyError(RuntimeError):
@@ -108,3 +110,54 @@ class RerankedResult:
     def transcript(self) -> str | None:
         """Transcripción de audio alineada con el fragmento."""
         return self.result.transcript
+
+
+@dataclass(frozen=True)
+class MultimodalQuery:
+    """Consulta de búsqueda que combina texto, documentos .txt, imágenes y audio."""
+
+    text: str | None = None
+    txt_contents: tuple[str, ...] = ()
+    images: tuple[bytes, ...] = ()
+    audio_paths: tuple[Path, ...] = ()
+    audio_bytes: tuple[bytes, ...] = ()
+    audio_transcripts: tuple[str, ...] = ()
+
+    @property
+    def has_content(self) -> bool:
+        """Indica si existe al menos una modalidad no vacía en la consulta."""
+        return bool(
+            (self.text and self.text.strip())
+            or any(t.strip() for t in self.txt_contents)
+            or self.images
+            or self.audio_paths
+            or self.audio_bytes
+            or any(t.strip() for t in self.audio_transcripts)
+        )
+
+    @property
+    def composed_text(self) -> str:
+        """Une texto directo, archivos .txt y transcripciones de audio en una sola cadena."""
+        parts: list[str] = []
+        if self.text and self.text.strip():
+            parts.append(self.text.strip())
+        for item in self.txt_contents:
+            if item.strip():
+                parts.append(item.strip())
+        for tr in self.audio_transcripts:
+            if tr.strip():
+                parts.append(tr.strip())
+        return " ".join(parts)
+
+    @property
+    def modality_summary(self) -> dict[str, Any]:
+        """Resumen serializable de las modalidades empleadas en la consulta."""
+        return {
+            "has_text": bool(self.text and self.text.strip()),
+            "txt_count": len([t for t in self.txt_contents if t.strip()]),
+            "image_count": len(self.images),
+            "audio_count": len(self.audio_paths) + len(self.audio_bytes),
+            "audio_transcript_count": len([t for t in self.audio_transcripts if t.strip()]),
+            "composed_text": self.composed_text,
+        }
+

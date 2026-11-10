@@ -75,9 +75,28 @@ def test_parse_args_defaults() -> None:
     assert args.no_audio is False
     assert args.whisper_model == "base"
 
-    custom = main.parse_args(["--no-audio", "--whisper-model", "small"])
+    custom = main.parse_args(
+        [
+            "--no-audio",
+            "--whisper-model",
+            "small",
+            "--query",
+            "camaleón",
+            "--query-txt",
+            "a.txt",
+            "--query-images",
+            "img1.jpg",
+            "img2.png",
+            "--query-audios",
+            "voz.wav",
+        ]
+    )
     assert custom.no_audio is True
     assert custom.whisper_model == "small"
+    assert custom.query == "camaleón"
+    assert custom.query_txt == ["a.txt"]
+    assert custom.query_images == ["img1.jpg", "img2.png"]
+    assert custom.query_audios == ["voz.wav"]
 
 
 def _fake_inputs(monkeypatch: pytest.MonkeyPatch, lines: list[str]) -> None:
@@ -192,3 +211,39 @@ def test_main_runs_benchmark_mode(
     assert main.main(["--benchmark", str(gt_file), "--no-rerank"]) == 0
     out = capsys.readouterr().out
     assert "Recall@1" in out and "MRR" in out
+
+
+def test_main_runs_one_shot_multimodal_search(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from unittest.mock import AsyncMock
+
+    fake_service = MagicMock()
+    fake_service.search = AsyncMock(
+        return_value=[SearchResult(0.93, "animals.mp4", 4, 12.0, 16.0)]
+    )
+    monkeypatch.setattr(main, "VideoRAGService", lambda **_: fake_service)
+
+    rc = main.main(
+        [
+            "--query-txt",
+            "nota.txt",
+            "--query-images",
+            "foto.jpg",
+            "--query-audios",
+            "clip.wav",
+            "--top-k",
+            "2",
+        ]
+    )
+    assert rc == 0
+    fake_service.search.assert_called_once()
+    kwargs = fake_service.search.call_args.kwargs
+    assert kwargs["txt_files"] == ["nota.txt"]
+    assert kwargs["image_files"] == ["foto.jpg"]
+    assert kwargs["audio_files"] == ["clip.wav"]
+    assert kwargs["limit"] == 2
+    out = capsys.readouterr().out
+    assert "animals.mp4" in out
+

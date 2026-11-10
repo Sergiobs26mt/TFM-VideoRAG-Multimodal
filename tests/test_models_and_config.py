@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import FrozenInstanceError
+from pathlib import Path
 
 import pytest
 
@@ -17,6 +18,7 @@ from src.config import (
 )
 from src.models import (
     AudioTranscriptionError,
+    MultimodalQuery,
     QuotaSafetyError,
     RerankedResult,
     SearchResult,
@@ -154,4 +156,49 @@ def test_build_run_config_includes_defaults_and_mode() -> None:
     cli_cfg = build_run_config(cli_args={"video": "test.mp4", "top_k": 3})
     assert cli_cfg["cli_args"] == {"video": "test.mp4", "top_k": 3}
     assert "mode" not in cli_cfg
+
+
+def test_multimodal_query_properties_and_immutability() -> None:
+    empty_q = MultimodalQuery(text="   ", txt_contents=("  ",))
+    assert not empty_q.has_content
+    assert empty_q.composed_text == ""
+    assert empty_q.modality_summary == {
+        "has_text": False,
+        "txt_count": 0,
+        "image_count": 0,
+        "audio_count": 0,
+        "audio_transcript_count": 0,
+        "composed_text": "",
+    }
+
+    img_only = MultimodalQuery(images=(b"fake-jpeg",))
+    assert img_only.has_content
+    assert img_only.composed_text == ""
+    assert img_only.modality_summary["image_count"] == 1
+
+    audio_raw_only = MultimodalQuery(audio_paths=(Path("voice.wav"),), audio_bytes=(b"RIFF",))
+    assert audio_raw_only.has_content
+    assert audio_raw_only.modality_summary["audio_count"] == 2
+
+    full_q = MultimodalQuery(
+        text="  león rugiendo ",
+        txt_contents=(" en la sabana ", ""),
+        images=(b"img1", b"img2"),
+        audio_paths=(Path("a.mp3"),),
+        audio_transcripts=(" documental de naturaleza ",),
+    )
+    assert full_q.has_content
+    assert full_q.composed_text == "león rugiendo en la sabana documental de naturaleza"
+    assert full_q.modality_summary == {
+        "has_text": True,
+        "txt_count": 1,
+        "image_count": 2,
+        "audio_count": 1,
+        "audio_transcript_count": 1,
+        "composed_text": "león rugiendo en la sabana documental de naturaleza",
+    }
+
+    with pytest.raises(FrozenInstanceError):
+        full_q.text = "otro"  # type: ignore[misc]
+
 

@@ -9,7 +9,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -28,6 +28,7 @@ __all__ = [
     "align_transcript_with_chunks",
     "extract_audio_track",
     "transcribe_audio",
+    "transcribe_query_audios",
     "transcribe_video_audio",
 ]
 
@@ -217,6 +218,61 @@ def transcribe_video_audio(
         )
     finally:
         wav_path.unlink(missing_ok=True)
+
+
+def transcribe_query_audios(
+    audio_inputs: Sequence[str | Path | bytes],
+    model_name: str = WHISPER_MODEL,
+    language: str | None = AUDIO_LANGUAGE,
+    transcriber_fn: Callable[[str, str, str | None], list[dict[str, Any]]] | None = None,
+) -> list[str]:
+    """Convierte y transcribe una secuencia de audios de consulta (rutas o bytes)."""
+    transcripts: list[str] = []
+    for item in audio_inputs:
+        temp_input: Path | None = None
+        wav_path: Path | None = None
+        try:
+            if isinstance(item, bytes):
+                if not item:
+                    logger.warning("Audio de consulta en bytes vacío; omitiendo.")
+                    continue
+                with tempfile.NamedTemporaryFile(suffix=".audio", delete=False) as tmp:
+                    tmp.write(item)
+                    temp_input = Path(tmp.name)
+                source_path = temp_input
+            else:
+                source_path = Path(item)
+
+            wav_path = extract_audio_track(source_path)
+            if wav_path is None:
+                continue
+
+            segments = transcribe_audio(
+                wav_path,
+                model_name=model_name,
+                language=language,
+                transcriber_fn=transcriber_fn,
+            )
+            combined = " ".join(s.text.strip() for s in segments if s.text.strip())
+            if combined:
+                transcripts.append(combined)
+            else:
+                logger.warning(
+                    "El audio de consulta '%s' no contiene locución reconocible.",
+                    source_path,
+                )
+        except (FileNotFoundError, AudioTranscriptionError, OSError) as exc:
+            logger.warning(
+                "No se pudo transcribir el audio de consulta (%s); continuando con el resto.",
+                exc,
+            )
+        finally:
+            if temp_input is not None:
+                temp_input.unlink(missing_ok=True)
+            if wav_path is not None:
+                wav_path.unlink(missing_ok=True)
+
+    return transcripts
 
 
 def align_transcript_with_chunks(

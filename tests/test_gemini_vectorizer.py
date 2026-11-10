@@ -9,7 +9,7 @@ import pytest
 from google.genai import errors
 
 from src.embeddings.gemini_vectorizer import GeminiMultimodalVectorizer
-from src.models import VectorizationError, VideoChunk
+from src.models import MultimodalQuery, VectorizationError, VideoChunk
 from src.utils import gemini_client as gc
 
 CHUNK = VideoChunk(index=3, start_frame=0, end_frame=9, start_time=1.5, end_time=4.0)
@@ -156,12 +156,55 @@ def test_embed_text(monkeypatch: pytest.MonkeyPatch) -> None:
 
     vec = _make(monkeypatch, fake)
     assert asyncio.run(vec.embed_text("un gol")) == [0.5, 0.5]
-    assert seen["contents"] == "un gol"
+    assert seen["contents"].parts is not None
+    assert len(seen["contents"].parts) == 1
+    assert seen["contents"].parts[0].text == "un gol"
 
 
 def test_embed_text_empty(monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.raises(ValueError):
         asyncio.run(_make(monkeypatch, None).embed_text("   "))
+
+
+def test_build_query_payload_and_embed_query_multimodal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.processing.video_chunker import encode_frame_jpeg
+
+    seen: dict[str, Any] = {}
+
+    async def fake(**kwargs: Any) -> Any:
+        seen.update(kwargs)
+        return _response([0.2, 0.4, 0.6])
+
+    vec = _make(monkeypatch, fake, target_width=256, jpeg_quality=80)
+    raw_img = encode_frame_jpeg(np.zeros((400, 600, 3), dtype=np.uint8))
+
+    mquery = MultimodalQuery(
+        text="busca este animal",
+        txt_contents=("en su hábitat",),
+        images=(raw_img,),
+        audio_transcripts=("caminando despacio",),
+    )
+
+    vector = asyncio.run(vec.embed_query(mquery))
+    assert vector == [0.2, 0.4, 0.6]
+    parts = seen["contents"].parts
+    assert parts is not None and len(parts) == 2
+    assert parts[0].inline_data is not None
+    assert parts[0].inline_data.mime_type == "image/jpeg"
+    assert parts[1].text == "busca este animal en su hábitat caminando despacio"
+
+
+def test_build_query_payload_rejects_empty_or_corrupt_image(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    vec = _make(monkeypatch, None)
+    with pytest.raises(ValueError):
+        vec.build_query_payload(MultimodalQuery(text="  "))
+
+    with pytest.raises(ValueError):
+        vec.build_query_payload(MultimodalQuery(images=(b"not-an-image",)))
 
 
 def test_payload_resizes_large_frames(monkeypatch: pytest.MonkeyPatch) -> None:

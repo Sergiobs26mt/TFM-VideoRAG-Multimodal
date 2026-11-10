@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, cast
 
@@ -86,6 +87,7 @@ class MultimodalReranker:
         raw_dir: Path | str = RAW_DIR,
         processed_dir: Path | str = PROCESSED_DIR,
         frames_per_candidate: int = 1,
+        query_images: Sequence[bytes] | None = None,
     ) -> list[RerankedResult]:
         """Verifica visualmente y reordena los candidatos en una única llamada por lotes."""
         if not candidates:
@@ -93,10 +95,23 @@ class MultimodalReranker:
 
         base_raw = Path(raw_dir)
         base_processed = Path(processed_dir)
+        cleaned_query = query.strip()
+        if cleaned_query and query_images:
+            search_desc = (
+                f"El usuario busca: '{cleaned_query}' "
+                "(apoyado por las imágenes de referencia adjuntas)."
+            )
+        elif cleaned_query:
+            search_desc = f"El usuario busca: '{cleaned_query}'."
+        else:
+            search_desc = (
+                "El usuario busca escenas que coincidan con las imágenes de referencia adjuntas."
+            )
+
         contents: list[Any] = [
             (
                 "Eres un juez experto para un sistema de Video RAG multimodal. "
-                f"El usuario busca: '{query}'.\n"
+                f"{search_desc}\n"
                 f"A continuación se presentan {len(candidates)} fragmentos de vídeo candidatos "
                 "recuperados previamente mediante similitud vectorial.\n"
                 "Para cada candidato se proporcionan sus fotogramas clave representativos "
@@ -124,6 +139,18 @@ class MultimodalReranker:
                 "]"
             )
         ]
+
+        if query_images:
+            encoded_refs = self._encode_query_images(query_images)
+            if encoded_refs:
+                contents.append("\n--- Imágenes de referencia de la consulta ---")
+                for ref_jpeg in encoded_refs:
+                    contents.append(
+                        types.Part.from_bytes(
+                            data=ref_jpeg,
+                            mime_type="image/jpeg",
+                        )
+                    )
 
         jpeg_map = await asyncio.to_thread(
             self._collect_candidate_jpegs,
@@ -224,6 +251,25 @@ class MultimodalReranker:
             reverse=True,
         )
         return reranked
+
+    def _encode_query_images(self, query_images: Sequence[bytes]) -> list[bytes]:
+        """Decodifica y normaliza a JPEG las imágenes de referencia de la consulta."""
+        encoded: list[bytes] = []
+        for raw_bytes in query_images:
+            if not raw_bytes:
+                continue
+            buf = np.frombuffer(raw_bytes, dtype=np.uint8)
+            frame = cv2.imdecode(buf, cv2.IMREAD_COLOR)
+            if frame is None:
+                continue
+            encoded.append(
+                encode_frame_jpeg(
+                    cast("NDArray[np.uint8]", frame),
+                    jpeg_quality=self._jpeg_quality,
+                    target_width=self._target_width,
+                )
+            )
+        return encoded
 
     def _normalize_jpeg_bytes(self, jpeg_bytes: bytes) -> bytes:
         """Re-codifica el JPEG si su ancho supera ``_target_width`` para reducir el payload."""

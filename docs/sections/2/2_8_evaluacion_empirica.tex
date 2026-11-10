@@ -211,3 +211,13 @@ El Cuadro~\ref{tab:experimento_broll_deduplicacion} sintetiza los resultados de 
 \bottomrule
 \end{tabularx}
 \end{table}
+
+\subsubsection{Arquitectura de Consultas Multimodales Unificadas (\texttt{MultimodalQuery})}
+\label{subsubsec:arquitectura_consultas_multimodales}
+
+Adicionalmente a la fusión audiovisual durante la indexación, la fase de recuperación incorpora soporte completo para consultas multimodales compuestas a través del modelo inmutable \texttt{MultimodalQuery} (\texttt{src/models.py}), accesible tanto desde la interfaz gráfica Streamlit (mediante los botones interactivos \texttt{Audio} e \texttt{Imágenes / .txt}) como desde la interfaz de línea de comandos (\texttt{--query}, \texttt{--query-txt}, \texttt{--query-images} y \texttt{--query-audios}):
+\begin{itemize}
+    \item \textbf{Normalización acústica y textual en consulta (\texttt{transcribe\_query\_audios}):} Las notas de voz grabadas desde el micrófono (\texttt{st.audio\_input}) o los archivos de audio subidos (\texttt{.wav}, \texttt{.mp3}, \texttt{.m4a}, \texttt{.ogg}) se convierten en memoria temporal a formato WAV mono a $16\text{ kHz}$ con \texttt{ffmpeg} y se transcriben mediante la instancia en caché de \texttt{openai-whisper}, integrándose junto al texto directo y los ficheros \texttt{.txt} en la propiedad \texttt{composed\_text}. Si una consulta aportada exclusivamente por voz resulta vacía por silencio (sin texto ni imágenes), el servicio intercepta la condición y lanza un \texttt{ValueError} controlado antes de consumir cuota de red.
+    \item \textbf{Empaquetado omnimodal en llamada única (\texttt{build\_query\_payload} y \texttt{embed\_query}):} Las imágenes de referencia (\texttt{.jpg}, \texttt{.png}, \texttt{.webp}) se redimensionan y codifican a JPEG (\texttt{types.Part.from\_bytes}) y se combinan con \texttt{composed\_text} (\texttt{types.Part.from\_text}) dentro de un único objeto \texttt{types.Content}, generando un solo vector de $3.072$ dimensiones en \texttt{gemini-embedding-2-preview} con coste constante de $1$ petición API por búsqueda y clave de caché determinista \texttt{SHA-256} sobre texto, imágenes y audio.
+    \item \textbf{Verificación bimodal con imágenes de referencia (\texttt{query\_images}):} En la Etapa 2, \texttt{MultimodalReranker.rerank} inyecta tanto el texto compuesto como las imágenes de referencia normalizadas en el \textit{prompt} de \texttt{gemini-3.5-flash-lite}, registrando la trazabilidad completa de las modalidades intervenientes (\texttt{modality\_summary}) en \texttt{search\_results.json}.
+\end{itemize}

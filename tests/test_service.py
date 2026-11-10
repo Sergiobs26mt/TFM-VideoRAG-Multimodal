@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.models import (
+    MultimodalQuery,
     RerankedResult,
     SearchResult,
     VectorizationError,
@@ -388,6 +389,152 @@ def test_service_search_deduplicates_adjacent_chunks_with_identical_transcript()
     assert results[1].start_time == pytest.approx(115.3)
     assert results[1].end_time == pytest.approx(120.5)
     assert results[1].transcript == shared_tr
+
+
+def test_service_search_multimodal_query_transcribes_audio_and_passes_images(
+    tmp_path: Path,
+) -> None:
+    engine = QdrantSearchEngine(path=None)
+    engine.create_collection(vector_size=3)
+    engine.insert_chunks(
+        [VectorizedChunk(0, 0.0, 4.0, [1.0, 0.0, 0.0], transcript="camaleón verde")],
+        video_name="animals.mp4",
+    )
+
+    txt_file = tmp_path / "extra.txt"
+    txt_file.write_text("en rama", encoding="utf-8")
+    img_file = tmp_path / "ref.jpg"
+    img_file.write_bytes(b"fake-jpg-bytes")
+    audio_file = tmp_path / "voice.wav"
+    audio_file.write_bytes(b"RIFF-audio-1")
+
+    seen_queries: list[MultimodalQuery] = []
+
+    async def fake_embed_query(q: str | MultimodalQuery) -> list[float]:
+        assert isinstance(q, MultimodalQuery)
+        seen_queries.append(q)
+        return [1.0, 0.0, 0.0]
+
+    fake_vectorizer = MagicMock()
+    fake_vectorizer.embed_query = AsyncMock(side_effect=fake_embed_query)
+
+    seen_rerank_kwargs: dict[str, Any] = {}
+
+    async def fake_rerank(
+        query: str, candidates: list[SearchResult], **kwargs: Any
+    ) -> list[RerankedResult]:
+        seen_rerank_kwargs["query"] = query
+        seen_rerank_kwargs.update(kwargs)
+        return [
+            RerankedResult(
+                result=candidates[0],
+                relevance_score=0.97,
+                is_relevant=True,
+                reasoning="Coincide con imagen y audio.",
+            )
+        ]
+
+    fake_reranker = MagicMock()
+    fake_reranker.rerank = AsyncMock(side_effect=fake_rerank)
+
+    service = VideoRAGService(
+        engine=engine,
+        vectorizer=fake_vectorizer,
+        reranker=fake_reranker,
+        raw_dir=tmp_path,
+        vector_size=3,
+    )
+
+    with (
+        patch(
+            "src.rag_engine.service.transcribe_query_audios",
+            return_value=["locución hablada"],
+        ) as mock_transcribe,
+        RunAuditor(tmp_path / "audit") as auditor,
+    ):
+        results = asyncio.run(
+            service.search(
+                "camaleón",
+                limit=1,
+                rerank=True,
+                auditor=auditor,
+                txt_files=[txt_file],
+                image_files=[img_file],
+                audio_files=[audio_file],
+            )
+        )
+        run_dir = auditor.run_dir
+
+    assert len(results) == 1
+    mock_transcribe.assert_called_once()
+    assert len(seen_queries) == 1
+    assert seen_queries[0].composed_text == "camaleón en rama locución hablada"
+    assert seen_queries[0].images == (b"fake-jpg-bytes",)
+    assert seen_rerank_kwargs["query"] == "camaleón en rama locución hablada"
+    assert seen_rerank_kwargs["query_images"] == (b"fake-jpg-bytes",)
+
+    import json
+
+    saved = json.loads((run_dir / "search_results.json").read_text(encoding="utf-8"))
+    assert saved["searches"][0]["modalities"]["image_count"] == 1
+    assert saved["searches"][0]["modalities"]["audio_count"] == 1
+    assert saved["searches"][0]["modalities"]["txt_count"] == 1
+
+
+def test_service_search_cache_distinguishes_different_audio_and_images() -> None:
+    engine = QdrantSearchEngine(path=None)
+    engine.create_collection(vector_size=3)
+    engine.insert_chunks(
+        [VectorizedChunk(0, 0.0, 4.0, [1.0, 0.0, 0.0])],
+        video_name="animals.mp4",
+    )
+
+    fake_vectorizer = MagicMock()
+    fake_vectorizer.embed_query = AsyncMock(return_value=[1.0, 0.0, 0.0])
+
+    service = VideoRAGService(
+        engine=engine,
+        vectorizer=fake_vectorizer,
+        vector_size=3,
+    )
+
+    transcripts_iter = iter([["primera nota de voz"], ["segunda nota de voz"]])
+    with patch(
+        "src.rag_engine.service.transcribe_query_audios",
+        side_effect=lambda *_, **__: next(transcripts_iter),
+    ):
+        q1 = MultimodalQuery(audio_bytes=(b"audio-bytes-1",))
+        q2 = MultimodalQuery(audio_bytes=(b"audio-bytes-2",))
+        asyncio.run(service.search(q1, rerank=False))
+        asyncio.run(service.search(q2, rerank=False))
+
+    assert fake_vectorizer.embed_query.call_count == 2
+
+
+def test_service_search_raises_value_error_when_audio_only_query_is_silent() -> None:
+    engine = QdrantSearchEngine(path=None)
+    engine.create_collection(vector_size=3)
+    fake_vectorizer = MagicMock()
+    fake_vectorizer.embed_query = AsyncMock(return_value=[1.0, 0.0, 0.0])
+
+    service = VideoRAGService(
+        engine=engine,
+        vectorizer=fake_vectorizer,
+        vector_size=3,
+    )
+
+    with (
+        patch("src.rag_engine.service.transcribe_query_audios", return_value=[]),
+        pytest.raises(ValueError, match="silencio|locución"),
+    ):
+        asyncio.run(
+            service.search(
+                MultimodalQuery(audio_bytes=(b"RIFF-silent",)),
+                rerank=False,
+            )
+        )
+    fake_vectorizer.embed_query.assert_not_called()
+
 
 
 

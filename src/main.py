@@ -37,6 +37,16 @@ from src.utils.audit import RunAuditor
 logger = logging.getLogger(__name__)
 
 EXIT_COMMANDS: tuple[str, ...] = ("salir", "exit", "quit", "q")
+__all__ = [
+    "EXIT_COMMANDS",
+    "build_run_config",
+    "format_timestamp",
+    "main",
+    "parse_args",
+    "print_benchmark_summary",
+    "print_results",
+    "run_search_loop",
+]
 
 
 def _format_transcript_snippet(transcript: str | None, max_chars: int = 120) -> str | None:
@@ -147,6 +157,29 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Ruta a archivo JSON con ground truth para evaluación automática",
     )
+    parser.add_argument(
+        "--query",
+        default=None,
+        help="Texto directo de consulta para búsqueda directa (sin bucle interactivo)",
+    )
+    parser.add_argument(
+        "--query-txt",
+        nargs="*",
+        default=None,
+        help="Rutas a archivos .txt cuyos contenidos se unirán a la consulta",
+    )
+    parser.add_argument(
+        "--query-images",
+        nargs="*",
+        default=None,
+        help="Rutas a imágenes de referencia (.jpg, .jpeg, .png, .webp)",
+    )
+    parser.add_argument(
+        "--query-audios",
+        nargs="*",
+        default=None,
+        help="Rutas a pistas de audio de consulta (.wav, .mp3, .m4a, .ogg)",
+    )
     return parser.parse_args(argv)
 
 
@@ -237,6 +270,27 @@ def main(argv: list[str] | None = None) -> int:
                     )
                 )
                 print_benchmark_summary(summary)
+            elif any(
+                (
+                    args.query,
+                    args.query_txt,
+                    args.query_images,
+                    args.query_audios,
+                )
+            ):
+                results = asyncio.run(
+                    service.search(
+                        args.query or "",
+                        limit=args.top_k,
+                        rerank=args.rerank,
+                        auditor=auditor,
+                        txt_files=args.query_txt,
+                        image_files=args.query_images,
+                        audio_files=args.query_audios,
+                        whisper_model=args.whisper_model,
+                    )
+                )
+                print_results(results)
             else:
                 run_search_loop(service, args.top_k, auditor, rerank=args.rerank)
         except (

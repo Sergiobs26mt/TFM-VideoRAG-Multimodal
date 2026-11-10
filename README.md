@@ -3,7 +3,7 @@
 ## Descripción del Proyecto
 Este Trabajo de Fin de Máster aborda el ciclo de vida completo para el diseño, desarrollo y validación técnica de un sistema avanzado de recuperación de información multimedia. El propósito del proyecto es implementar una arquitectura capaz de procesar grandes volúmenes de datos no estructurados (vídeo, audio y texto) transformándolos en representaciones vectoriales densas (embeddings) dentro de un espacio semántico unificado.
 
-El sistema resultante permite realizar búsquedas semánticas cruzadas (localizar el instante exacto de un evento en un archivo de vídeo a partir de una consulta en lenguaje natural) sin requerir metadatos manuales previos.
+El sistema resultante permite realizar búsquedas semánticas cruzadas y multimodales (localizar el instante exacto de un evento en un archivo de vídeo a partir de texto libre, archivos `.txt`, imágenes de referencia y/o pistas de audio) sin requerir metadatos manuales previos.
 
 ## Objetivo General
 Diseñar, implementar y validar empíricamente un sistema avanzado de recuperación de información multimedia basado en arquitecturas de vectorización multimodal, capaz de localizar eventos de interés en grandes volúmenes de datos no estructurados a partir de búsquedas semánticas en lenguaje natural.
@@ -21,7 +21,7 @@ Diseñar, implementar y validar empíricamente un sistema avanzado de recuperaci
 
 ## 1. ¿Cómo funciona?
 
-El sistema segmenta cada vídeo en **planos visuales (`VideoChunk`)**, extrae y transcribe la **pista completa de audio** con Whisper, alinea temporalmente las locuciones con cada plano y fusiona **imagen + voz transcrita en un único embedding multimodal de 3072 dimensiones** almacenado en Qdrant. En tiempo de consulta, ejecuta una **recuperación en dos etapas**: búsqueda vectorial coseno (Etapa 1) seguida de verificación y reordenación bimodal (visual + auditiva) con Gemini 3.5 Flash Lite (Etapa 2).
+El sistema segmenta cada vídeo en **planos visuales (`VideoChunk`)**, extrae y transcribe la **pista completa de audio** con Whisper, alinea temporalmente las locuciones con cada plano y fusiona **imagen + voz transcrita en un único embedding multimodal de 3072 dimensiones** almacenado en Qdrant. En tiempo de consulta, acepta cualquier combinación de **texto libre, archivos `.txt`, imágenes de referencia y pistas de audio** (`MultimodalQuery`), empaquetándolos en una sola llamada de vectorización (Etapa 1) seguida de verificación y reordenación bimodal (visual + auditiva) con Gemini 3.5 Flash Lite (Etapa 2).
 
 ### Flujo de indexación
 
@@ -40,10 +40,10 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    Q["Consulta en lenguaje natural"] --> V["embed_text<br/>(gemini-embedding-2-preview)"]
+    Q["MultimodalQuery<br/>(Texto + .txt + Imágenes + Audio ASR)"] --> V["embed_query / build_query_payload<br/>(gemini-embedding-2-preview, 1 llamada)"]
     V --> S["Etapa 1: QdrantSearchEngine.search_event<br/>(coseno + deduplicación temporal)"]
     G[("Qdrant local")] --> S
-    S --> M["Etapa 2: MultimodalReranker<br/>(Gemini 3.5 Flash Lite: collage 3 fotogramas + transcripción)"]
+    S --> M["Etapa 2: MultimodalReranker<br/>(Gemini 3.5 Flash Lite: imágenes ref. + collage + transcripción)"]
     M --> R["Resultados validados: intervalo, score, análisis y transcripción"]
 ```
 
@@ -105,7 +105,7 @@ flowchart LR
 │   └── utils/
 │       ├── audit.py         # RunAuditor (logs, config y resultados por run)
 │       └── gemini_client.py # Cliente compartido y transporte asíncrono con reintentos
-├── tests/                   # Pruebas unitarias (133 tests) y E2E con la API real en tests/e2e/
+├── tests/                   # Pruebas unitarias (147 tests) y E2E con la API real en tests/e2e/
 ├── requirements.txt
 └── AGENTS.md                # Reglas de estilo y desarrollo del repositorio
 ```
@@ -122,12 +122,13 @@ flowchart LR
 - **`extract_audio_track(video_path, output_wav=None)`**: extrae la pista de audio completa en un archivo temporal `.wav` (PCM 16-bit, mono `-ac 1`, `16000 Hz`, `-vn`) mediante `ffmpeg` sin `shell=True`. Si el vídeo no contiene pista de audio, limpia el temporal y devuelve `None`.
 - **`transcribe_audio(audio_path, model_name="base", language="es", transcriber_fn=None)`**: transcribe el audio completo con `openai-whisper` cacheando el modelo en memoria a nivel de módulo y devuelve una lista ordenada de `TranscriptSegment(start_time, end_time, text)`.
 - **`transcribe_video_audio(video_path, model_name="base", language="es")`**: encadena extracción y transcripción garantizando el borrado del `.wav` temporal en un bloque `finally`.
+- **`transcribe_query_audios(audio_inputs, model_name="base", language="es")`**: convierte pistas de audio de consulta (archivos `.wav`, `.mp3`, `.m4a`, `.ogg` o `bytes` grabados desde el micrófono) a WAV 16 kHz mono temporal con `ffmpeg`, las transcribe con la caché de Whisper y aplica degradación elegante limpiando siempre los archivos temporales.
 - **`align_transcript_with_chunks(chunks, segments, min_overlap=0.2)`**: cruza los segmentos transcritos con los intervalos `[start_time, end_time]` de cada `VideoChunk`. Asigna un segmento si la intersección temporal es `>= min_overlap` o si el segmento está completamente contenido en el plano. Cuando una frase hablada cruza el corte entre dos planos superando `min_overlap` en ambos, se asigna a ambos como solapamiento semántico fronterizo.
 
 ### 4.3 Vectorización multimodal fusionada: `src/embeddings/gemini_vectorizer.py`
 - **`GeminiMultimodalVectorizer.build_payload(key_frames, transcript=None)`**: codifica los 3 fotogramas clave a JPEG (`image/jpeg`) y, si el plano dispone de `transcript`, añade un `types.Part.from_text` (`"Transcripción de audio del fragmento: ..."`). Todo viaja en **un único `types.Content`**, generando un solo vector multimodal de 3072 dimensiones y consumiendo **1 petición por chunk**.
 - **`vectorize_chunk(chunk, key_frames)`**: devuelve `VectorizedChunk(index, start_time, end_time, embedding, transcript)`.
-- **`embed_text(text)`**: genera el embedding de la consulta textual en el mismo espacio de 3072 dimensiones.
+- **`build_query_payload(query)` y `embed_query(query)`**: empaquetan todas las modalidades de un `MultimodalQuery` (imágenes de referencia redimensionadas y codificadas a JPEG + `composed_text` que une texto libre, archivos `.txt` y transcripciones de audio de consulta) en un único `types.Content` para obtener 1 vector de 3072 dimensiones en una sola llamada a `gemini-embedding-2-preview`. `embed_text(text)` delega en `embed_query` por retrocompatibilidad.
 
 ### 4.4 Pipeline de ingestión: `src/processing/pipeline.py`
 `process_video_pipeline(video_path, max_concurrent_requests=3, progress_callback=None, threshold=0.5, min_shot_frames=12, resize_width=160, entropy_stride=1, jpeg_quality=80, output_dimensionality=3072, target_width=512, max_shot_duration=8.0, enable_audio=True, whisper_model="base")`:
@@ -143,8 +144,8 @@ flowchart LR
   Al fusionar fragmentos, `_merge_transcripts` une las locuciones en orden cronológico eliminando solapamientos de palabras o frases repetidas en la frontera.
 
 ### 4.6 Reordenación y Verificación Bimodal (Etapa 2): `src/rag_engine/reranker.py`
-- **`MultimodalReranker`**: combina los fotogramas cacheados de cada candidato en un collage vertical y adjunta su `transcript` alineado en una única llamada por lotes a `gemini-3.5-flash-lite`.
-- **Evaluación bimodal (Visual + Auditiva)**: valida un fragmento (`is_relevant: true`) si el concepto buscado aparece en los fotogramas, si se explica en la locución transcrita o en ambos, devolviendo `RerankedResult(result, relevance_score, is_relevant, reasoning)`. Si la API falla tras los reintentos, conserva el orden vectorial de la Etapa 1.
+- **`MultimodalReranker`**: combina los fotogramas cacheados de cada candidato en un collage vertical y adjunta su `transcript` alineado (además de las imágenes de referencia `query_images` de la consulta cuando el usuario las aporta) en una única llamada por lotes a `gemini-3.5-flash-lite`.
+- **Evaluación bimodal (Visual + Auditiva)**: valida un fragmento (`is_relevant: true`) si el concepto o imagen de referencia buscada aparece en los fotogramas, si se explica en la locución transcrita o en ambos, devolviendo `RerankedResult(result, relevance_score, is_relevant, reasoning)`. Si la API falla tras los reintentos, conserva el orden vectorial de la Etapa 1.
 
 ## 5. Instalación
 
@@ -172,6 +173,10 @@ streamlit run app.py
 
 #### Características de la UI:
 - **Gestión e indexación de vídeos**: subida de archivos (`.mp4`, `.avi`, `.mov`, `.mkv`), indexación de vídeos locales en `data/raw/`, re-indexación y borrado selectivo o completo de la base de datos.
+- **Consultas multimodales con dos botones desplegables junto al buscador**:
+  - **`Audio`**: permite grabar voz directamente desde el micrófono (`st.audio_input`) y/o subir una o varias pistas de audio (`.wav`, `.mp3`, `.m4a`, `.ogg`).
+  - **`Imágenes / .txt`**: permite subir una o varias imágenes de referencia (`.png`, `.jpg`, `.jpeg`, `.webp`) y archivos `.txt`.
+  - Permite ejecutar la búsqueda aunque el cuadro de texto esté vacío siempre que exista al menos un adjunto activo, mostrando debajo del buscador un resumen visual compacto (miniaturas de imágenes, reproductor de audio y transcripción detectada por Whisper).
 - **Parámetros de indexación ajustables**: controles para SSIM (`threshold`, `min_shot_frames`, `entropy_stride`), red (`max_concurrent`, `jpeg_quality`, `target_width`) y **transcripción ASR con Whisper** (activación de audio y selector de modelo `tiny`, `base`, `small`).
 - **Tarjetas de resultados bimodales**: muestran el intervalo temporal, insignia de validación VLM, barra de relevancia, explicación bimodal, transcripción hablada del segmento y botón **"Saltar aquí"** sincronizado con el reproductor de vídeo.
 
@@ -198,8 +203,11 @@ python -m src.main --index --video python_tutorial.mp4
 python -m src.main --index --video python_tutorial.mp4 --whisper-model small
 python -m src.main --index --video animals.mp4 --no-audio
 
-# Buscar sobre la colección ya indexada en Qdrant
+# Buscar sobre la colección ya indexada en Qdrant (bucle interactivo)
 python -m src.main
+
+# Búsqueda multimodal directa (one-shot) combinando texto, .txt, imágenes y/o audios
+python -m src.main --query "camaleón" --query-txt nota.txt --query-images ref.jpg --query-audios voz.wav
 ```
 
 | Argumento | Por defecto | Descripción |
@@ -217,6 +225,10 @@ python -m src.main
 | `--no-audio` | `False` | Desactiva la extracción y transcripción de audio con Whisper |
 | `--whisper-model` | `base` | Modelo local de OpenAI Whisper (`tiny`, `base`, `small`, etc.) |
 | `--benchmark` | `None` | Ruta a archivo JSON con consultas ground truth para evaluación automática |
+| `--query` | `None` | Texto directo para ejecutar una búsqueda one-shot sin bucle interactivo |
+| `--query-txt` | `None` | Uno o varios archivos `.txt` cuyo contenido se une a la consulta |
+| `--query-images` | `None` | Una o varias imágenes de referencia (`.jpg`, `.jpeg`, `.png`, `.webp`) |
+| `--query-audios` | `None` | Una o varias pistas de audio de consulta (`.wav`, `.mp3`, `.m4a`, `.ogg`) |
 
 Ejemplo de salida en CLI con transcripción y reranker bimodal:
 
@@ -261,7 +273,7 @@ Cada sesión en CLI (`src/main.py`) o Streamlit (`src/ui/app.py`) crea una carpe
 |---|---|
 | `execution.log` | Logs completos a nivel `DEBUG` (segmentación, alineación de audio, llamadas HTTP, Qdrant y reranker) |
 | `run_config.json` | Parámetros de ejecución (`chunking_defaults`, `vectorizer_defaults`, `search_defaults`, `audio_defaults`, `cli_args`) |
-| `search_results.json` | Historial de búsquedas de la sesión incluyendo `score`, `relevance_score`, `is_relevant`, `reasoning` y `transcript` |
+| `search_results.json` | Historial de búsquedas de la sesión incluyendo `modalities` (`modality_summary`), `score`, `relevance_score`, `is_relevant`, `reasoning` y `transcript` |
 
 ## 9. Resultados empíricos con fusión audiovisual
 
@@ -287,10 +299,10 @@ Comparativa entre la línea base visual (`2026-11-06`, [`informe_pruebas_e2e.md`
 ## 10. Tests y calidad de código
 
 ```bash
-python -m pytest                                                 # pruebas unitarias (133 tests, sin red ni GPU)
+python -m pytest                                                 # pruebas unitarias (147 tests, sin red ni GPU)
 python -m pytest tests/e2e -m e2e -q                             # baterías E2E con la API real de Gemini
 python -m ruff check src tests app.py                            # linter
 python -m mypy --explicit-package-bases src tests app.py         # tipado estático
 ```
 
-Las 133 pruebas unitarias se ejecutan en ~2 segundos simulando `ffmpeg`, Whisper y el cliente de Gemini, y utilizando Qdrant en memoria o en directorios temporales. Las pruebas E2E (`tests/e2e/`) evalúan las baterías literal (`data/dataframe_gt/video_chunks_ground_truth.csv`), multi-objetivo y negativa sobre `animals.mp4` y `python_tutorial.mp4`.
+Las 147 pruebas unitarias se ejecutan en ~2 segundos simulando `ffmpeg`, Whisper y el cliente de Gemini, y utilizando Qdrant en memoria o en directorios temporales. Las pruebas E2E (`tests/e2e/`) evalúan las baterías literal (`data/dataframe_gt/video_chunks_ground_truth.csv`), multi-objetivo y negativa sobre `animals.mp4` y `python_tutorial.mp4`.
