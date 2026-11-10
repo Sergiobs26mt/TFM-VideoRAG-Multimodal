@@ -1,0 +1,27 @@
+\subsection{Arnés de Trazabilidad, Observabilidad y Auditoría Experimental}
+\label{subsec:arnes_trazabilidad_auditoria}
+
+Uno de los pilares metodológicos exigidos en una investigación científica rigurosa es la auditabilidad completa de las pruebas empíricas. Los experimentos basados en modelos de lenguaje y APIs propietarias corren el riesgo de introducir sesgos de volatilidad temporal o pérdida de traza de las peticiones intermedias. Para blindar la validez científica del estudio, se implementó el sistema de auditoría integral \texttt{RunAuditor} (\texttt{src/ui/auditor.py} y \texttt{src/utils/audit.py}).
+
+\subsubsection{Estructura del Registro Experimental}
+Cada ejecución del sistema o batería de pruebas genera de manera determinista un directorio sellado temporalmente:
+\begin{equation}
+    \text{RutaAuditoría} = \text{\texttt{data/audit/}} \, \langle\text{timestamp}\rangle\_\langle\text{run\_id}\rangle /
+\end{equation}
+
+Dentro de esta ruta, el auditor persiste de forma atómica tres artefactos normalizados:
+\begin{enumerate}
+    \item \textbf{\texttt{run\_metadata.json}:} Registra la marca de tiempo de inicio y finalización en formato ISO-8601, el identificador único UUID del experimento, la versión del código y el desglose temporal granular: tiempo de decodificación de vídeo, tiempo de ejecución de Whisper, latencia agregada de llamadas a la API de embeddings, tiempo de consulta en el grafo HNSW de Qdrant y latencia de la etapa de verificación con el juez LLM.
+    \item \textbf{\texttt{config.json}:} Contiene la serialización exhaustiva de todos los objetos de configuración inmutables utilizados (\texttt{ChunkingConfig}, \texttt{VectorizerConfig}, \texttt{SearchConfig} y \texttt{AudioConfig}). Esto garantiza que cualquier diferencia de rendimiento observada entre dos experimentos pueda atribuirse de manera inequívoca a una variación explícita en los hiperparámetros.
+    \item \textbf{\texttt{search\_results.json}:} Almacena la traza acumulativa de cada consulta ejecutada durante la sesión. Para cada consulta, se archiva:
+    \begin{itemize}
+        \item Las modalidades presentes en la consulta de entrada (texto, imágenes o audios).
+        \item La lista completa de candidatos devueltos por la Etapa 1 en Qdrant, incluyendo la puntuación de similitud coseno $S_C$, las marcas de tiempo y el texto transcrito de cada fragmento.
+        \item Las decisiones emitidas por el árbitro bimodal en la Etapa 2: juicio booleano (\texttt{is\_relevant}), puntuación normalizada (\texttt{relevance\_score}) y la justificación textual del razonamiento emitido por el modelo (\texttt{reasoning}).
+    \end{itemize}
+\end{enumerate}
+
+\subsubsection{Protocolo de Reproducibilidad Desacoplada}
+Este diseño de trazabilidad introduce una ventaja científica determinante: desacopla por completo la fase de inferencia remota de la fase de análisis métrico.
+
+Una vez ejecutada la batería de pruebas sobre un corpus, el archivo \texttt{search\_results.json} contiene la verdad experimental completa de la sesión. A partir de este registro, es posible ejecutar scripts de análisis cuantitativo automatizado para calcular métricas de recuperación (\textit{Recall@k}, \textit{MRR}, \textit{NDCG@k}, precisión de frontera temporal) y generar gráficos comparativos de forma instantánea, determinista y sin necesidad de realizar nuevas llamadas a la API ni incurrir en costes computacionales adicionales.

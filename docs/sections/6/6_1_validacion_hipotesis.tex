@@ -1,0 +1,26 @@
+\subsection{Validación Formal de Hipótesis y Cumplimiento de Objetivos}
+\label{subsec:validacion_hipotesis_objetivos}
+
+La culminación de este Trabajo de Fin de Máster de investigación permite confrontar las tres hipótesis científicas formuladas en la Sección~\ref{sec:introduccion} con la evidencia empírica acumulada a lo largo de las 138 consultas experimentales:
+
+\subsubsection{Validación de las Hipótesis de Investigación}
+\begin{enumerate}[label=\textbf{Hipótesis \arabic* ($H_\arabic*$):}, wide=0pt, leftmargin=*]
+    \item \textbf{Fusión Temprana y Compensación Asimétrica:}
+    \textit{Confirmada.} La inyección conjunta de tres fotogramas clave y la transcripción fonética Whisper en un único contenedor \texttt{types.Content} incrementa el \textit{Recall@1} en $+17,8$ puntos porcentuales ($67,9\% \to 85,7\%$) y el \textit{MRR} en $+0,118$ en el corpus técnico con locución sincronizada (\texttt{python\_tutorial.mp4}). En metraje de naturaleza con \textit{B-roll} desacoplado (\texttt{animals.mp4}), aunque la Etapa 1 experimenta una leve desviación direccional hacia la locución hablada ($\Delta\text{\textit{Recall@1}} = -8,7\text{ pp}$), el \textit{Recall@5} alcanza el $100,0\%$ ($46/46$) y la verificación bimodal de Etapa 2 subsana por completo el desfase, elevando el \textit{Recall@1} al **$93,5\%$** ($43/46$) y el \textit{Recall@5} al **$97,8\%$**, superando a la línea base puramente visual en ambos dominios.
+
+    \item \textbf{Compresión Dimensional y Eficiencia con MRL:}
+    \textit{Confirmada.} El truncamiento de los embeddings omnimodales de 3072 a 768 dimensiones mediante \textit{Matryoshka Representation Learning} (MRL \cite{kusupati2022matryoshka}) retiene el **$98,77\%$ del \textit{Recall@1} relativo** en las 102 consultas literales ($80/102$ frente a $81/102$), preserva un \textit{MRR} idéntico ($0,8691$ frente a $0,8688$) e incrementa el \textit{Recall@5} del $97,06\%$ al **$99,02\%$** debido al filtrado de ruido de alta frecuencia. Esta compresión reduce la huella de memoria en un **$75,0\%$** (de $12\text{ KB}$ a $3\text{ KB}$ por vector) y acelera la búsqueda en Qdrant en un **$44,4\%$** ($1,14\text{ ms} \to 0,63\text{ ms}$).
+
+    \item \textbf{Erradicación de Falsos Positivos y Precisión en Consultas Complejas:}
+    \textit{Confirmada.} El árbitro bimodal multimodal (\textit{Gemini 3.5 Flash Lite}) erradica los falsos positivos derivados de la similitud del coseno en la primera etapa, alcanzando una **tasa de rechazo del $100,0\%$** ($0/240$ falsos positivos admitidos en las 16 consultas negativas de control a lo largo de las tres dimensiones evaluadas). Asimismo, en consultas generales multi-objetivo duplica la precisión en el metraje documental, pasando del $50,00\%$ al **$96,57\%$** y situando un acierto verdadero en la primera posición en el **$100,0\%$ de los casos** ($10/10$).
+\end{enumerate}
+
+\subsubsection{Cumplimiento de los Objetivos Específicos}
+El trabajo ha satisfecho de forma rigurosa los cinco objetivos específicos definidos:
+\begin{itemize}
+    \item \textbf{OE1 (Estado del Arte):} Analizado en la Sección~\ref{sec:revision_literatura}, abarcando fundamentos matemáticos, taxonomía de modelos omnimodales, sistemas \textit{Video-RAG} y métricas de evaluación.
+    \item \textbf{OE2 (Metodología y Arquitectura):} Formalizado en la Sección~3, estableciendo el pipeline de segmentación SSIM, alineación forzada de voz, proyección MRL y recuperación en dos etapas.
+    \item \textbf{OE3 (Prototipo Experimental):} Implementado en la Sección~4, construyendo un sistema modular en Python con \textit{Gemini Embedding 2}, almacenamiento en Qdrant, verificador bimodal y arnés de trazabilidad \texttt{RunAuditor}.
+    \item \textbf{OE4 (Evaluación Empírica):} Ejecutado en la Sección~5 mediante tres baterías de prueba exhaustivas (138 consultas en 164 fragmentos audiovisuales), demostrando la viabilidad de MRL a 768 dimensiones.
+    \item \textbf{OE5 (Viabilidad Computacional y Costes):} Evaluado en la Subsección~5.5, cuantificando latencias granulares por etapa y proyectando una huella de memoria de solo $2,86\text{ GB}$ para un millón de fragmentos.
+\end{itemize}

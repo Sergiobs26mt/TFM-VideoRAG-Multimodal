@@ -1,0 +1,31 @@
+\subsection{Banco de Pruebas Experimental, Corpus Audiovisuales y Catálogo de Consultas}
+\label{subsec:banco_pruebas_corpus}
+
+Para evaluar rigurosamente las hipótesis de investigación $H_1$, $H_2$ y $H_3$, se diseñó un banco de pruebas empírico estructurado en torno a dos corpus de metraje continuo de vídeo con propiedades semánticas y de acoplamiento audiovisual diametralmente opuestas.
+
+\subsubsection{Caracterización de los Corpus Audiovisuales de Referencia}
+Los dos vídeos seleccionados totalizan $164$ fragmentos temporales indexados en la base vectorial local:
+\begin{enumerate}
+    \item \textbf{Dominio Técnico con Locución Sincronizada (\texttt{python\_tutorial.mp4}):} Metraje de $242,5\text{ s}$ de duración, correspondiente a una clase magistral de programación impartida por Brais Moure. Tras la segmentación adaptativa por SSIM ($\theta_{\text{SSIM}} = 0,65, T_{\max} = 12,0\text{ s}$), se generan $82$ fragmentos temporales ($81/82$ con presencia de voz activa, $98,8\%$). En este dominio existe un acoplamiento temporal estricto entre lo que el ponente pronuncia verbalmente y las instrucciones sintácticas que se codifican en pantalla.
+    \item \textbf{Dominio Documental con Metraje Desacoplado (\texttt{animals.mp4}):} Metraje de $243,0\text{ s}$ de duración perteneciente a un documental de naturaleza con locución en \textit{off} continua ($82/82$ fragmentos con audio, $100,0\%$). Este metraje presenta el fenómeno clásico de \textit{B-roll desacoplado}: el narrador expone consideraciones taxonómicas y evolutivas generales mientras en pantalla se suceden planos de especies animales específicas que no son mencionadas textualmente en ese segundo concreto.
+\end{enumerate}
+
+\subsubsection{Taxonomía del Catálogo de Consultas Anotadas}
+El banco de consultas comprende tres baterías de prueba disjuntas, diseñadas para someter al sistema a diferentes grados de dificultad perceptual y semántica:
+\begin{itemize}
+    \item \textbf{Batería 1: Consultas Literales de Evento Único (102 consultas):} Compuesta por $56$ consultas sobre \texttt{python\_tutorial.mp4} y $46$ consultas sobre \texttt{animals.mp4}. Cada consulta describe un instante o evento altamente específico (por ejemplo, \textit{``Símbolo de llaves tachado con cruz roja X''} o \textit{``León macho descansando tumbado''}), contando con un único intervalo temporal de verdad terreno (\textit{ground truth}).
+    \item \textbf{Batería 2: Consultas Generales y Multi-Objetivo (20 consultas):} Evalúa la capacidad del sistema para recuperar categorías taxonómicas y patrones abstractos distribuidos en múltiples intervalos disjuntos del vídeo. Comprende $10$ consultas en \texttt{python\_tutorial.mp4} ($48$ intervalos válidos totales, tales como \textit{``Estructuras de datos (list, tuple, set, dict)''} o \textit{``Terminal mostrando salida de ejecución''}) y $10$ consultas en \texttt{animals.mp4} ($58$ intervalos válidos, tales como \textit{``Felinos''}, \textit{``Reptiles''}, \textit{``Aves''} o \textit{``Animales de color blanco y negro''}).
+    \item \textbf{Batería 3: Consultas Negativas de Control (16 consultas):} Formada por $8$ consultas por vídeo referidas a conceptos formalmente ausentes del metraje (por ejemplo, \textit{``Definición de clases con class e \_\_init\_\_''} en Python, o \textit{``Tiburón blanco atacando en el océano''} en animales). Evalúa la inmunidad del sistema frente a alucinaciones y falsos positivos inducidos por similitud del coseno espuria en la Etapa 1.
+\end{itemize}
+
+\subsubsection{Métricas Formales de Evaluación}
+El rendimiento del sistema se cuantifica mediante métricas estandarizadas en Recuperación de Información (\textit{Information Retrieval}):
+\begin{itemize}
+    \item \textbf{\textit{Recall@k} ($k \in \{1, 3, 5\}$):} Proporción de consultas literales donde el fragmento objetivo correcto se sitúa dentro de las primeras $k$ posiciones del ranking.
+    \item \textbf{\textit{Mean Reciprocal Rank} (MRR):} Media del inverso del rango del primer resultado correcto:
+    \begin{equation}
+        \text{MRR} = \frac{1}{|Q|} \sum_{q=1}^{|Q|} \frac{1}{\text{rank}_q}
+    \end{equation}
+    \item \textbf{\textit{Interval Recall} y Precisión en Consultas Multi-Objetivo:} Proporción de intervalos temporales válidos recuperados respecto al total de intervalos esperados, y porcentaje de candidatos devueltos que son efectivamente pertinentes tras la evaluación del árbitro bimodal.
+    \item \textbf{Tasa de Rechazo de Falsos Positivos:} Porcentaje de candidatos recuperados en consultas negativas que son correctamente identificados y descartados por el verificador de Etapa 2 con puntuación nula ($0,0$).
+\end{itemize}

@@ -1,0 +1,45 @@
+\subsection{Mecanismo de Recuperación en Dos Etapas y Verificación Bimodal}
+\label{subsec:recuperacion_dos_etapas}
+
+La búsqueda sobre grandes colecciones de vídeo enfrenta una disyuntiva clásica entre latencia y precisión: la comparación exhaustiva mediante modelos de visión-lenguaje de alta capacidad resulta computacionalmente inviable en tiempo real, mientras que la recuperación densa basada exclusivamente en similitud del coseno puede verse afectada por coincidencias superficiales y falsos positivos \cite{video_rag2024, eval_mrag2025}. Para resolver este dilema, el sistema adopta una arquitectura en dos etapas jerárquicas: recuperación aproximada de alta cobertura (Etapa 1) y verificación bimodal estructurada (Etapa 2).
+
+\subsubsection{Etapa 1: Recuperación Densa y Deduplicación Temporal}
+La consulta multimodal $\mathcal{Q}$ emitida por el usuario es vectorizada en un embedding unitario $\mathbf{q}^{(d)} \in \mathbb{S}^{d-1}$ a la resolución dimensional seleccionada $d$. A continuación, el motor de búsqueda vectorial local \textit{Qdrant} ejecuta una búsqueda de vecinos más cercanos basada en el índice jerárquico de grafos navegables de mundo pequeño (HNSW) con función de distancia coseno:
+\begin{equation}
+    \mathcal{C}_{\text{raw}} = \text{Top-}k_1 \left( \{ (C_i, S_d(\mathbf{q}, \mathbf{v}_i)) \}_{i=1}^N \right)
+\end{equation}
+donde el factor de sobremuestreo se establece dinámicamente en $k_1 = \min(5 \cdot k_{\text{target}}, 20)$, garantizando un amplio espacio de candidatos para la etapa posterior.
+
+Para evitar redundancias causadas por cortes visuales muy próximos dentro de una misma escena continua, la lista preliminar $\mathcal{C}_{\text{raw}}$ es sometida a un algoritmo determinista de deduplicación temporal:
+\begin{itemize}
+    \item \textbf{Fusión de micro-planos adyacentes:} Si dos candidatos recuperados pertenecen al mismo archivo de vídeo y su distancia temporal es inferior a $1,0\text{ s}$, se unifican en un único intervalo envolvente $[t_{\min}, t_{\max}]$.
+    \item \textbf{Deduplicación de locuciones repetidas:} Si fragmentos adyacentes comparten una transcripción idéntica o solapada superior al 80\% de coincidencia léxica, se preserva únicamente el candidato con mayor similitud en la primera etapa.
+\end{itemize}
+
+El resultado es un conjunto curado $\mathcal{C}_{\text{dedup}}$ de candidatos únicos, ordenados descendentemente por su puntuación vectorial $S_d(\mathbf{q}, \mathbf{v}_i)$.
+
+\subsubsection{Etapa 2: Árbitro Bimodal Multimodal con Gemini 3.5 Flash Lite}
+Los mejores candidatos de $\mathcal{C}_{\text{dedup}}$ son transferidos a la segunda etapa de verificación. Para cada candidato $C_i$, el sistema recupera de la caché local en disco los fotogramas clave en formato JPEG y la transcripción de audio alineada $\tau_i$.
+
+El modelo de lenguaje multimodal \textit{Gemini 3.5 Flash Lite} actúa como juez bimodal independiente. Se formula un \textit{prompt} estructurado que incluye:
+\begin{enumerate}
+    \item La consulta original del usuario (incluyendo imágenes de referencia o transcripción de audio de la consulta).
+    \item La evidencia visual del candidato (fotogramas clave secuenciales del fragmento).
+    \item La evidencia auditiva textualizada (transcripción de las palabras efectivamente pronunciadas en ese intervalo).
+    \item Instrucciones de juicio disjunto e inclusivo: un fragmento se considera relevante si la respuesta a la consulta se encuentra presente en la imagen, en la locución hablada, o en la combinación simultánea de ambas modalidades.
+\end{enumerate}
+
+El modelo responde forzando una gramática JSON estricta para cada candidato:
+\begin{equation}
+    \text{Evaluación}(C_i) = \left\{ \text{relevance\_score} \in [0,0, 1,0], \,\, \text{is\_relevant} \in \{\text{true}, \text{false}\}, \,\, \text{reasoning} \in \text{String} \right\}
+\end{equation}
+
+\subsubsection{Discriminación de Falsos Positivos y Ordenación Definitiva}
+La puntuación final asignada al fragmento combina la evidencia de ambas etapas y aplica una función de corte estricta:
+\begin{equation}
+    \text{Score}_{\text{final}}(C_i) = \begin{cases}
+        \text{relevance\_score}_i, & \text{si } \text{is\_relevant}_i = \text{true} \land \text{relevance\_score}_i \ge \theta_{\text{rel}} \\
+        0,0, & \text{en caso contrario}
+    \end{cases}
+\end{equation}
+donde $\theta_{\text{rel}} = 0,5$. Los candidatos que no superan el criterio del árbitro bimodal son descartados inmediatamente, lo que garantiza que consultas con conceptos inexistentes o trampas visuales no superen la fase de validación (inmunidad total frente a falsos positivos). La lista final de resultados devuelta al usuario se trunca a los $k_{\text{target}}$ mejores elementos, acompañados del razonamiento explícito generado por el modelo.

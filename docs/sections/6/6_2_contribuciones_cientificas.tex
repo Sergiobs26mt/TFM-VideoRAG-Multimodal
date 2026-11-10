@@ -1,0 +1,11 @@
+\subsection{Contribuciones Científicas y Metodológicas al Estado del Arte}
+\label{subsec:contribuciones_cientificas}
+
+Esta investigación aporta cuatro contribuciones fundamentales al área de la Recuperación de Información Multimedia y los sistemas \textit{Video-RAG}:
+
+\begin{enumerate}
+    \item \textbf{Paradigma de Fusión Temprana Audio-Visual con Invarianza de Cuota:} Se demuestra que inyectar simultáneamente fotogramas clave y locución fonética continua alineada dentro de un único contenedor de llamada de API (\texttt{types.Content}) no solo preserva la riqueza perceptual cruzada, sino que mantiene estrictamente invariable el coste de cuota ($1\text{ fragmento} = 1\text{ llamada}$ de vectorización), eliminando el sobrecoste de procesar modalidades en canalizaciones separadas.
+    \item \textbf{Evidencia Empírica del Comportamiento MRL sobre Vídeo de Larga Duración:} Se aporta un estudio pionero de ablación dimensional sobre \textit{Gemini Embedding 2} en tres resoluciones ($3072, 1536, 768$). Se demuestra experimentalmente que truncar el vector un $75\%$ ($d = 768$) actúa como un regularizador semántico frente a fondos invariantes, elevando el \textit{Recall@5} al $99,02\%$ y reduciendo la latencia de búsqueda en Qdrant un $44,4\%$.
+    \item \textbf{Mecanismo de Verificación Bimodal Desacoplado para Erradicación de Falsos Positivos:} Se formaliza una arquitectura en dos etapas donde la primera etapa maximiza la exhaustividad (\textit{Recall@5} $\ge 97\%$) y la segunda etapa aplica un razonamiento multimodal disjunto e inclusivo, logrando una tasa de rechazo del $100\%$ en consultas negativas y duplicando la precisión en consultas generales complejas.
+    \item \textbf{Metodología de Auditoría Experimental Reproducible:} Se publica un banco de pruebas anotado de 138 consultas sobre dominios contrastados, junto con un arnés de instrumentación (\texttt{RunAuditor}) que permite auditar y re-calcular deterministamente métricas de Information Retrieval sin depender de la volatilidad de APIs externas.
+\end{enumerate}

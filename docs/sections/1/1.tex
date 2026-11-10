@@ -7,15 +7,64 @@ La evolución contemporánea de los sistemas de Recuperación Aumentada por Gene
 \subsection{Planteamiento del Problema}
 Históricamente, la arquitectura tradicional para recuperar información en vídeo obligaba a procesar los fotogramas por separado, emplear modelos de transcripción fonética básica para el audio (como Whisper) y extraer texto mediante Reconocimiento Óptico de Caracteres (OCR) para indexarlo todo como texto plano \cite{video_rag2024}. El estado del arte ha demostrado empíricamente que convertir toda la información visual a texto plano genera un cuello de botella informacional y una pérdida severa de contexto temporal, espacial, estructural y emocional, haciendo desaparecer la disposición espacial (\textit{layout}) y las relaciones semánticas entre los objetos visuales \cite{prajwal2025multimodal}. Frente a estas limitaciones, la aparición de modelos de \textit{embeddings} omnimodales permite ingerir texto, vídeo, audio y documentos estructurados (PDF) de forma nativa para proyectarlos en un único vector numérico sin requerir metadatos anotados manualmente \cite{gemini_emb2_docs}.
 
-\subsection{Propuesta y Objetivos del Trabajo Fin de Máster}
-El presente Trabajo de Fin de Máster aborda el ciclo de vida completo para el diseño, desarrollo y validación técnica de un sistema avanzado de recuperación de información multimedia capaz de transformar grandes volúmenes de datos no estructurados (vídeo, audio y texto) en representaciones vectoriales densas (\textit{embeddings}) dentro de un espacio semántico unificado. El sistema permite realizar búsquedas semánticas cruzadas (localizando el instante exacto de un evento en un archivo de vídeo a partir de una consulta en lenguaje natural) sin depender de metadatos previos.
+No obstante, la proyección conjunta de vídeo y audio en espacios vectoriales continuos plantea interrogantes abiertos de investigación: ¿cómo interacciona la pista de voz con el contenido visual cuando existe desacoplamiento temático (\textit{B-roll})? ¿cuánta fidelidad semántica se pierde al truncar representaciones multimodales densas mediante técnicas como \textit{Matryoshka Representation Learning} (MRL)? y ¿cómo evitar falsos positivos derivados de la similitud coseno en búsquedas aproximadas? Este trabajo aborda estas cuestiones de forma empírica y metodológica.
 
-Para estructurar este desarrollo, se define el siguiente \textbf{Objetivo General}: diseñar, implementar y validar empíricamente un sistema avanzado de recuperación de información multimedia basado en arquitecturas de vectorización multimodal, capaz de localizar eventos de interés en grandes volúmenes de datos no estructurados a partir de búsquedas semánticas en lenguaje natural. Este propósito se desglosa en cinco \textbf{Objetivos Específicos}:
-\newpage
-\begin{enumerate}
-    \item \textbf{Analizar el estado del arte} tecnológico en el ámbito de los modelos fundacionales multimodales (generación de \textit{embeddings}) y los sistemas de búsqueda semántica (RAG y bases de datos vectoriales), evaluando las alternativas óptimas para el proyecto.
-    \item \textbf{Diseñar la arquitectura técnica} y el flujo de procesamiento (\textit{pipeline}) de datos, definiendo los métodos para la ingestión, fragmentación, preprocesamiento y vectorización de los archivos de vídeo, audio y texto.
-    \item \textbf{Desarrollar una Prueba de Concepto (PoC)} funcional que integre el modelo de \textit{embeddings} seleccionado, mapeando los distintos tipos de datos en un espacio semántico unificado para permitir búsquedas cruzadas eficientes sin depender de metadatos previos.
-    \item \textbf{Evaluar y validar el rendimiento} del sistema mediante la ejecución de un plan de pruebas empíricas, midiendo métricas clave como la precisión en la recuperación de eventos, el coste computacional y la viabilidad técnica general de la solución.
-    \item \textbf{Documentar el ciclo de vida completo} del proyecto de ingeniería del software y datos, detallando el marco metodológico utilizado desde la definición de requisitos hasta la validación final.
+\subsection{Preguntas de Investigación e Hipótesis}
+\label{subsec:rqs_hipotesis}
+
+Para guiar la investigación de manera sistemática, se formulan tres preguntas de investigación (\textit{Research Questions}, RQs) y sus correspondientes hipótesis de partida:
+
+\begin{enumerate}[label=\textbf{RQ\arabic*:}, wide=0pt, leftmargin=*]
+    \item \textbf{¿En qué medida la fusión temprana de fotogramas clave y transcripción fonética continua alineada dentro de un espacio vectorial denso omnimodal mejora la precisión de recuperación frente a canalizaciones unimodales o desacopladas?}
+    \begin{itemize}[label=$\hookrightarrow$, leftmargin=1.5em]
+        \item \textbf{Hipótesis 1 ($H_1$):} La fusión temprana de imágenes y locución temporalmente alineada en un único embedding reduce el cuello de botella contextual, incrementando de forma medible el \textit{Recall@1} y el \textit{MRR} en contenido con locución sincronizada, mientras que preserva la recuperabilidad de los fragmentos en metraje con audio y vídeo desacoplados (\textit{B-roll}).
+    \end{itemize}
+
+    \item \textbf{¿Cuál es la tasa de degradación de las métricas de recuperación al comprimir el espacio latente de 3072 dimensiones hasta 128 dimensiones mediante \textit{Matryoshka Representation Learning} (MRL)?}
+    \begin{itemize}[label=$\hookrightarrow$, leftmargin=1.5em]
+        \item \textbf{Hipótesis 2 ($H_2$):} El truncamiento dimensional guiado por MRL \cite{kusupati2022matryoshka} retiene más del 90\% del rendimiento original de recuperación (\textit{MRR}, \textit{NDCG@5} y \textit{Hit@1}) en subespacios de hasta 512 dimensiones, permitiendo reducir el consumo de memoria vectorial y acelerar la búsqueda aproximada con un coste métrico mínimo.
+    \end{itemize}
+
+    \item \textbf{¿Cómo contribuye una arquitectura de recuperación en dos etapas (\textit{Retrieval} denso + Reordenación multimodal con LLM) a la erradicación de falsos positivos y a la resolución de consultas complejas?}
+    \begin{itemize}[label=$\hookrightarrow$, leftmargin=1.5em]
+        \item \textbf{Hipótesis 3 ($H_3$):} Un juez bimodal de segunda etapa basado en un modelo fundacional multimodal mitiga los falsos positivos derivados de coincidencias de similitud coseno espurias (alcanzando tasas de rechazo del 100\% en consultas negativas de control) y resuelve eficazmente consultas que combinan texto, imágenes y audio.
+    \end{itemize}
 \end{enumerate}
+
+\subsection{Objetivos del Trabajo Fin de Máster}
+\label{subsec:objetivos}
+
+El \textbf{Objetivo General} de este trabajo consiste en: \textit{Diseñar, formalizar, implementar y evaluar empíricamente una arquitectura de recuperación de información multimedia basada en vectorización omnimodal y reordenación bimodal, demostrando su viabilidad técnica, precisión y eficiencia en la localización temporal de eventos sobre secuencias de vídeo de larga duración sin metadatos previos.}
+
+Para alcanzar este fin, se definen cinco \textbf{Objetivos Específicos}:
+\begin{enumerate}[label=\textbf{OE\arabic*:}, wide=0pt, leftmargin=*]
+    \item \textbf{Analizar el estado del arte} tecnológico y los fundamentos matemáticos de los espacios vectoriales multimodales, los modelos fundacionales omnimodales y las técnicas de fragmentación temporal para \textit{Video-RAG}.
+    \item \textbf{Formalizar la metodología y arquitectura} del sistema, definiendo la fragmentación adaptativa por planos visuales (SSIM), la alineación temporal forzada de locución fonética (Whisper) y la proyección multimodal temprana.
+    \item \textbf{Desarrollar un prototipo experimental (PoC)} funcional e instrumentado con trazabilidad integral (\textit{RunAuditor}), integrando el modelo \textit{Gemini Embedding 2}, almacenamiento vectorial en \textit{Qdrant} y verificación de segunda etapa con \textit{Gemini 3.5 Flash Lite}.
+    \item \textbf{Ejecutar un plan de evaluación empírica riguroso}, analizando la ablación multimodal (visual vs. audio-visual), la compresión dimensional MRL (de 3072 a 128 dimensiones) y el comportamiento ante consultas multi-objetivo y negativas de control.
+    \item \textbf{Evaluar la viabilidad computacional y costes}, midiendo latencias de indexación y búsqueda, consumo de cuota de inferencia y escalabilidad para la transferencia a entornos productivos y líneas de investigación futuras.
+\end{enumerate}
+
+\subsection{Contribuciones Principales}
+\label{subsec:contribuciones}
+
+Las principales contribuciones científicas y metodológicas de esta investigación se resumen en:
+\begin{itemize}
+    \item \textbf{Metodología de Fusión Temprana Audio-Visual:} Integración de planos visuales clave extraídos por similitud estructural (SSIM) con locución transcrita y alineada temporalmente, empaquetados en una única llamada de vectorización omnimodal.
+    \item \textbf{Estudio Empírico de Ablación MRL en Vídeo:} Evaluación sistemática del comportamiento de representaciones Matryoshka sobre el modelo \textit{Gemini Embedding 2} en 6 niveles dimensionales ($3072, 1536, 768, 512, 256, 128$), analizando el compromiso entre precisión y ahorro de memoria.
+    \item \textbf{Arquitectura de Recuperación y Verificación Bimodal en Dos Etapas:} Mecanismo de reordenación asistido por un modelo de lenguaje multimodal que combina collages visuales y transcripciones para desambiguar candidatos y erradicar falsos positivos.
+    \item \textbf{Arnés Experimental Reproducible y Conjunto de Datos Anotado:} Banco de pruebas automatizado con métricas objetivas de Information Retrieval y trazabilidad completa de cada ejecución para auditoría experimental.
+\end{itemize}
+
+\subsection{Estructura del Documento}
+\label{subsec:estructura_memoria}
+
+La presente memoria se organiza en seis secciones:
+\begin{itemize}
+    \item \textbf{Sección \ref{sec:introduccion} (Introducción):} Presenta el contexto, motivación, preguntas de investigación, hipótesis, objetivos y contribuciones del trabajo.
+    \item \textbf{Sección \ref{sec:revision_literatura} (Revisión de la Literatura):} Examina los fundamentos matemáticos de los embeddings, la taxonomía de modelos omnimodales, arquitecturas \textit{Video-RAG}, técnicas de fragmentación temporal y métricas de evaluación.
+    \item \textbf{Sección 3 (Metodología y Propuesta Arquitectónica):} Formaliza matemáticamente el espacio latente multimodal, la ingesta adaptativa y el proceso de recuperación y verificación en dos etapas.
+    \item \textbf{Sección 4 (Configuración Experimental y Prototipo):} Detalla el banco de pruebas experimental, la implementación del prototipo y el arnés de observabilidad y trazabilidad.
+    \item \textbf{Sección 5 (Resultados Experimentales y Discusión Crítica):} Expone y analiza cuantitativamente los resultados de los estudios de ablación (audio-visual y dimensional MRL), consultas complejas y costes computacionales.
+    \item \textbf{Sección 6 (Conclusiones y Trabajo Futuro):} Contrasta los resultados contra las hipótesis de partida, expone las lecciones aprendidas y propone líneas de investigación futuras.
+\end{itemize}

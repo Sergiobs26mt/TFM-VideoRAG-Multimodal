@@ -1,0 +1,11 @@
+\subsection{Limitaciones del Estudio y Restricciones Técnicas}
+\label{subsec:limitaciones_estudio}
+
+A pesar del rigor metodológico aplicado, el presente trabajo presenta limitaciones técnicas que deben ser consideradas:
+
+\begin{itemize}
+    \item \textbf{Dependencia de APIs Propietarias en la Nube:} El sistema depende de los modelos alojados por Google (\textit{Gemini Embedding 2} y \textit{Gemini 3.5 Flash Lite}). Aunque se implementaron políticas de reintentos exponenciales y cortafuegos de cuota, la disponibilidad operativa, la latencia de red y las cuotas de la capa gratuita ($1.000\text{ RPD}$) condicionan el ritmo de indexación masiva en entornos sin conexión a Internet o en escenarios con requisitos estrictos de soberanía de datos.
+    \item \textbf{Precisión Fonética del Modelo Whisper \texttt{base}:} Para hacer viable la ejecución local en tiempo real sobre CPU, se seleccionó el modelo Whisper en su variante \texttt{base}. Aunque demostró un rendimiento notable, ocasionalmente comete errores de transcripción en palabras técnicas complejas o modismos coloquiales muy específicos, los cuales se propagan al texto inyectado en el vectorizador.
+    \item \textbf{Sensibilidad del Algoritmo SSIM ante Cambios Graduales:} La detección de cortes basada exclusivamente en SSIM es idónea para transiciones de plano netas, pero muestra menor sensibilidad ante transiciones lentas por disolución encadenada (\textit{cross-dissolve}) o movimientos panorámicos continuos de cámara, dependiendo en esos casos de la cota máxima temporal ($T_{\max} = 12,0\text{ s}$).
+    \item \textbf{Tamaño del Corpus de Validación:} Si bien el banco de pruebas (164 fragmentos, 138 consultas) fue anotado minuciosamente a mano para garantizar un \textit{ground truth} de máxima calidad, la escala total del metraje (aproximadamente 8,1 minutos) representa una prueba de concepto que debe validarse a futuro sobre conjuntos de datos públicos masivos de cientos de horas de duración (como \textit{Video-MME} o \textit{LongVideoBench}) \cite{video_rag2024, rethinking_long_video2026}.
+\end{itemize}

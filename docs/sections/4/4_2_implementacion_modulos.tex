@@ -1,0 +1,35 @@
+\subsection{Implementación Modular del Prototipo Experimental}
+\label{subsec:implementacion_modular_prototipo}
+
+El prototipo se diseñó siguiendo el principio de inversión de dependencias y bajo un desacoplamiento estricto de componentes, como evidencia el análisis de grafos del repositorio (27 comunidades funcionales y 0 ciclos de dependencia). A continuación se detallan las decisiones de implementación adoptadas en los módulos nucleares:
+
+\subsubsection{Módulo de Ingesta, Segmentación y Transcripción}
+El paquete \texttt{src/processing/} implementa la ingesta de medios a través de dos componentes cooperativos:
+\begin{itemize}
+    \item \textbf{\texttt{video\_chunker.py}:} La función \texttt{process\_video\_single\_pass} recorre los fotogramas del metraje decodificados por OpenCV. En lugar de almacenar fotogramas completos en memoria, calcula el índice SSIM sobre miniaturas en escala de grises de 160 píxeles de ancho (\texttt{resize\_width = 160}), acelerando el cálculo en un factor de $8\times$. Cuando se detecta un corte de plano, extrae los tres fotogramas clave en su resolución de trabajo (ancho 512 px) y los almacena en una caché local temporal en formato JPEG para evitar re-lecturas de disco.
+    \item \textbf{\texttt{audio\_transcriber.py}:} Ejecuta Whisper en un proceso aislado, capturando el flujo de segmentos temporales. La función \texttt{align\_transcript\_with\_chunks} aplica el algoritmo de solape temporal ($\ge 0,2\text{ s}$) para fusionar de manera forzada las locuciones con cada \texttt{VideoChunk}.
+\end{itemize}
+
+\subsubsection{Vectorizador Multimodal y Truncamiento MRL}
+El módulo \texttt{src/embeddings/gemini\_vectorizer.py} define la clase \texttt{GeminiMultimodalVectorizer}. Este componente ensambla el objeto \texttt{types.Content} combinando las tres imágenes JPEG codificadas en binario con la parte textual de la transcripción fonética.
+
+El truncamiento de representaciones Matryoshka se encapsula en la función matemática \texttt{truncate\_and\_normalize\_mrl}:
+\begin{equation}
+    \mathbf{v}^{(d)} = \text{\texttt{truncate\_and\_normalize\_mrl}}(\mathbf{v}, d)
+\end{equation}
+Esta función comprueba que la dimensión solicitada $d$ pertenezca a los límites admisibles ($1 \le d \le 3072$), extrae la sub-rebanada (\textit{slice}) de los primeros $d$ coeficientes, calcula su norma euclídea mediante \texttt{numpy.linalg.norm} y proyecta el vector resultante sobre la hiperesfera $\mathbb{S}^{d-1}$.
+
+\subsubsection{Motor de Búsqueda Vectorial Qdrant}
+La clase \texttt{QdrantSearchEngine} en \texttt{src/rag\_engine/vector\_db.py} gestiona la persistencia e indexación en la base de datos vectorial local. Para cada fragmento, genera un identificador determinista derivado del nombre del archivo y del índice secuencial del plano, evitando duplicados en re-indexaciones. La consulta de vecinos más cercanos se formula a través de la API \texttt{search} de Qdrant, extrayendo las cargas útiles asociadas a los vectores para reconstruir instancias de \texttt{SearchResult}.
+
+\subsubsection{Árbitro Bimodal Multimodal y Parser Resiliente}
+El componente \texttt{MultimodalReranker} en \texttt{src/rag\_engine/reranker.py} implementa la verificación bimodal de segunda etapa mediante llamadas asíncronas concurrentes. Para mitigar posibles truncamientos de tokens en respuestas JSON extensas emitidas por \textit{Gemini 3.5 Flash Lite}, se programó un decodificador sintáctico resiliente (\texttt{\_parse\_evaluations\_json}). Si el JSON estándar falla debido a un cierre incompleto de corchetes, el decodificador realiza un análisis iterativo mediante \texttt{json.JSONDecoder.raw\_decode}, recuperando todas las evaluaciones completas individuales antes del corte y evitando el fallo global de la consulta.
+
+\subsubsection{Fachada de Orquestación e Interfaz Gráfica}
+La clase orquestadora \texttt{VideoRAGService} (\texttt{src/rag\_engine/service.py}) actúa como fachada unificada del sistema, exponiendo dos métodos de alto nivel:
+\begin{itemize}
+    \item \texttt{index\_video(video\_path, run\_config, progress\_callback)}: ejecuta el pipeline completo de ingesta, transcripción, vectorización y almacenamiento en Qdrant.
+    \item \texttt{search(query, search\_config, run\_config, auditor)}: orquesta la vectorización de la consulta multimodal, la recuperación en Qdrant, la deduplicación temporal y el reordenamiento bimodal.
+\end{itemize}
+
+Por último, el paquete \texttt{src/ui/app.py} implementa una interfaz gráfica reactiva con Streamlit. La aplicación permite componer consultas multimodales combinando cuadros de texto, carga de ficheros \texttt{.txt}, subida de imágenes y archivos de audio, visualizando los resultados mediante tarjetas interactivas que enlazan directamente el reproductor de vídeo con el intervalo temporal exacto $[t_{\text{start}}, t_{\text{end}}]$ recuperado.

@@ -1,0 +1,55 @@
+\subsection{Modelo de Dominio Inmutable y Contratos de Datos para Reproducibilidad}
+\label{subsec:modelo_datos_inmutable}
+
+En una investigación empírica en recuperación de información, la reproducibilidad de los experimentos y la integridad de los resultados dependen de la consistencia de las estructuras de datos que fluyen entre los subsistemas de ingesta, indexación y consulta. 
+
+\subsubsection{Entidades de Dominio Inmutables}
+Para prevenir efectos colaterales y garantizar que los vectores y metadatos no puedan ser modificados tras su generación, todas las entidades centrales del sistema se implementan como clases de datos estrictamente inmutables (\texttt{@dataclass(frozen=True)}). La Figura~\ref{fig:diagrama_modelo_datos} sintetiza la jerarquía y relaciones entre las entidades del dominio:
+
+\begin{figure}[htbp]
+\centering
+\small
+\begin{tcolorbox}[colback=white,colframe=gray!50,arc=2mm,title={\bfseries Estructura del Modelo de Dominio Inmutable}]
+\begin{itemize}[leftmargin=1.5em]
+    \item \textbf{\texttt{TranscriptSegment}:} Representa una locución temporal continua.
+    \begin{itemize}
+        \item Atributos: \texttt{start\_time: float}, \texttt{end\_time: float}, \texttt{text: str}.
+    \end{itemize}
+    \item \textbf{\texttt{VideoChunk}:} Segmento temporal derivado de la detección de planos por SSIM.
+    \begin{itemize}
+        \item Atributos: \texttt{index: int}, \texttt{start\_frame: int}, \texttt{end\_frame: int}, \texttt{start\_time: float}, \texttt{end\_time: float}, \texttt{transcript: str | None}.
+    \end{itemize}
+    \item \textbf{\texttt{VectorizedChunk}:} Fragmento indexable con su proyección latente.
+    \begin{itemize}
+        \item Atributos: \texttt{index: int}, \texttt{start\_time: float}, \texttt{end\_time: float}, \texttt{embedding: list[float]}, \texttt{transcript: str | None}.
+    \end{itemize}
+    \item \textbf{\texttt{SearchResult}:} Candidato recuperado en la Etapa 1 por similitud del coseno.
+    \begin{itemize}
+        \item Atributos: \texttt{score: float}, \texttt{video\_name: str}, \texttt{chunk\_index: int}, \texttt{start\_time: float}, \texttt{end\_time: float}, \texttt{transcript: str | None}.
+    \end{itemize}
+    \item \textbf{\texttt{RerankedResult}:} Resultado verificado y clasificado por el árbitro bimodal (Etapa 2).
+    \begin{itemize}
+        \item Atributos: \texttt{result: SearchResult}, \texttt{relevance\_score: float}, \texttt{is\_relevant: bool}, \texttt{reasoning: str}.
+    \end{itemize}
+    \item \textbf{\texttt{MultimodalQuery}:} Consulta omnimodal polimórfica inmutable.
+    \begin{itemize}
+        \item Atributos: \texttt{text: str | None}, \texttt{txt\_contents: tuple[str, ...]}, \texttt{images: tuple[bytes, ...]}, \texttt{audio\_paths: tuple[Path, ...]}, \texttt{audio\_bytes: tuple[bytes, ...]}, \texttt{audio\_transcripts: tuple[str, ...]}.
+    \end{itemize}
+\end{itemize}
+\end{tcolorbox}
+\caption{Entidades fundamentales del modelo de datos inmutable implementadas en el sistema.}
+\label{fig:diagrama_modelo_datos}
+\end{figure}
+
+El uso de tuplas inmutables (\texttt{tuple}) en \texttt{MultimodalQuery} impide mutaciones accidentales de los contenidos binarios de imágenes o audios durante la resolución de la consulta. La propiedad derivada \texttt{composed\_text} unifica automáticamente el texto directo, el contenido de archivos \texttt{.txt} y las transcripciones de las pistas de audio aportadas por el usuario.
+
+\subsubsection{Trazabilidad Científica Integral mediante \textit{RunAuditor}}
+Para asegurar la total reproducibilidad de cada ejecución experimental, se diseñó el componente \texttt{RunAuditor}. Cada sesión de indexación o batería de consultas genera de forma determinista un directorio de auditoría bajo la ruta \texttt{data/audit/<timestamp>\_<run\_id>/} con tres artefactos estructurados en JSON:
+
+\begin{enumerate}
+    \item \textbf{\texttt{run\_metadata.json}:} Registra los metadatos de entorno (marca temporal ISO-8601, versión del sistema, identificador único de ejecución, plataforma hardware y latencias acumuladas).
+    \item \textbf{\texttt{config.json}:} Almacena la fotografía exacta de todos los hiperparámetros operativos: modelo de vectorización (\texttt{gemini-embedding-2-preview}), dimensionalidad seleccionada $d \in \mathcal{D}_{\text{MRL}}$, calidad de codificación JPEG, umbral de similitud SSIM, modelo de reranker (\texttt{gemini-3.5-flash-lite}) y factor de sobremuestreo $k_1$.
+    \item \textbf{\texttt{search\_results.json}:} Archiva la traza completa de cada consulta ejecutada: vector de consulta emitido, lista íntegra de candidatos recuperados en la Etapa 1 con sus puntuaciones de coseno, y evaluaciones individuales de la Etapa 2 con los juicios booleanos, puntuaciones y justificaciones textuales.
+\end{enumerate}
+
+Esta trazabilidad desacopla el análisis empírico de la ejecución en vivo, permitiendo re-evaluar métricas analíticas (\textit{Recall@k}, \textit{MRR}, \textit{NDCG}) sin incurrir en nuevas llamadas a la API ni depender de la volatilidad del estado del servidor.

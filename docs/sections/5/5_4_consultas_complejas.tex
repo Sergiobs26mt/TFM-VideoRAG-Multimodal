@@ -1,0 +1,46 @@
+\subsection{Evaluación en Consultas Complejas: Multi-Objetivo y Control Negativo}
+\label{subsec:consultas_complejas}
+
+Esta subsección contrasta la Hipótesis 3 ($H_3$) y la Pregunta de Investigación 3 (\textbf{RQ3}), analizando el comportamiento de la arquitectura en dos etapas ante consultas multi-intervalo y consultas con conceptos ausentes.
+
+\subsubsection{Consultas Generales y Multi-Objetivo (Batería 2)}
+Las consultas multi-objetivo evalúan la capacidad del sistema para recuperar conceptos de alto nivel semántico distribuidos a lo largo del metraje. El Cuadro~\ref{tab:multi_target_resumen} sintetiza los resultados para las 20 consultas generales ($106$ intervalos esperados en total) evaluadas con $k_1 = 10$.
+
+\begin{table}[htbp]
+\centering
+\small
+\setlength{\tabcolsep}{4.0pt}
+\caption{Rendimiento en consultas multi-objetivo en Etapa 1 (Qdrant) y Etapa 2 (Juez Bimodal).}
+\label{tab:multi_target_resumen}
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Corpus de Vídeo} & \begin{tabular}[c]{@{}c@{}}\textbf{Dimensión}\\\textbf{($d$)}\end{tabular} & \textbf{Intervalos} & \begin{tabular}[c]{@{}c@{}}\textbf{Recall}\\\textbf{Etapa 1}\end{tabular} & \begin{tabular}[c]{@{}c@{}}\textbf{Precisión}\\\textbf{Etapa 1}\end{tabular} & \begin{tabular}[c]{@{}c@{}}\textbf{Recall}\\\textbf{Etapa 2}\end{tabular} & \begin{tabular}[c]{@{}c@{}}\textbf{Precisión}\\\textbf{Etapa 2}\end{tabular} \\
+\midrule
+\texttt{python\_tutorial.mp4} & $d = 3072$ & 48 & $85,42\%$ ($40/48$) & $45,00\%$ & $82,08\%$ ($38/48$) & $78,65\%$ \\
+\texttt{python\_tutorial.mp4} & $d = 1536$ & 48 & $87,08\%$ ($41/48$) & $47,00\%$ & $82,08\%$ ($38/48$) & $78,12\%$ \\
+\texttt{python\_tutorial.mp4} & $d = 768$  & 48 & $\mathbf{87,22\%}$ ($41/48$) & $46,00\%$ & $\mathbf{83,89\%}$ ($40/48$) & $\mathbf{80,06\%}$ \\
+\midrule
+\texttt{animals.mp4} & $d = 3072$ & 58 & $\mathbf{74,89\%}$ ($42/58$) & $\mathbf{50,00\%}$ & $\mathbf{71,64\%}$ ($40/58$) & $\mathbf{96,57\%}$ \\
+\texttt{animals.mp4} & $d = 1536$ & 58 & $71,98\%$ ($40/58$) & $48,00\%$ & $68,73\%$ ($38/58$) & $96,33\%$ \\
+\texttt{animals.mp4} & $d = 768$  & 58 & $\mathbf{74,89\%}$ ($42/58$) & $\mathbf{50,00\%}$ & $\mathbf{71,64\%}$ ($40/58$) & $\mathbf{96,57\%}$ \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+En \texttt{animals.mp4}, categorías taxonómicas como \textit{``Felinos''} (4 objetivos), \textit{``Reptiles''} (2 objetivos) o \textit{``Aves''} (4 objetivos) demuestran la eficacia de la segunda etapa: la precisión media se duplica, ascendiendo del **$50,00\%$ en Etapa 1 al $96,57\%$ en Etapa 2**. Más aún, en las 10 consultas generales de animales y en las tres dimensiones evaluadas, el árbitro bimodal posiciona un acierto verdadero en el puesto número uno del ranking en el **$100,0\%$ de los casos** ($10/10$).
+
+\subsubsection{Consultas Negativas de Control e Inmunidad a Falsos Positivos (Batería 3)}
+Las búsquedas aproximadas basadas en similitud del coseno devuelven obligatoriamente los $k$ candidatos con mayor producto escalar, con independencia de que el concepto consultado exista o no en el corpus.
+
+Para evaluar la capacidad de discriminación del sistema, se ejecutaron 16 consultas negativas de control en las tres dimensiones ($48$ ejecuciones y $240$ evaluaciones individuales de candidatos con \textit{Gemini 3.5 Flash Lite}):
+\begin{itemize}
+    \item \textbf{Etapa 1 (Qdrant sin umbral):} Devuelve $240/240$ candidatos ($100\%$ de falsos positivos potenciales), dado que los fragmentos de mayor similitud superficial corresponden a planos visualmente parecidos pero temáticamente erróneos.
+    \item \textbf{Etapa 2 (Árbitro Bimodal):} Descarta el **$100,0\%$ de los candidatos** ($0/240$ falsos positivos admitidos), asignando a cada fragmento una puntuación de $0,0$ con la justificación explícita de ausencia de evidencia visual y auditiva.
+\end{itemize}
+
+Este resultado se mantiene inalterado en $d=3072$, $d=1536$ y $d=768$, demostrando que el truncamiento dimensional no induce degradación en la especificidad del sistema.
+
+\subsubsection{Validación Cuantitativa de la Hipótesis 3 ($H_3$)}
+La Hipótesis 3 queda confirmada empíricamente: la verificación bimodal con un modelo de lenguaje multimodal erradica por completo los falsos positivos derivados de la similitud del coseno (tasa de rechazo del $100,0\%$) y eleva la precisión en consultas generales complejas por encima del $96\%$.

@@ -1,0 +1,46 @@
+\subsection{Análisis de Eficiencia Computacional, Latencias y Huella de Almacenamiento}
+\label{subsec:eficiencia_computacional_costes}
+
+Esta subsección analiza la viabilidad computacional y operativa de la arquitectura propuesta, evaluando los desgloses de latencia por etapa, la escalabilidad de almacenamiento vectorial y los compromisos de diseño para su adopción en entornos de producción.
+
+\subsubsection{Desglose Granular de Latencias}
+El arnés de auditoría \texttt{RunAuditor} registró los tiempos de ejecución de cada componente del prototipo:
+\begin{itemize}
+    \item \textbf{Segmentación Visual (SSIM):} La optimización sobre miniaturas de 160 px alcanza un rendimiento de procesamiento de aproximadamente $45\text{ FPS}$ en CPU Apple Silicon, procesando un vídeo de 4 minutos en menos de $6\text{ segundos}$.
+    \item \textbf{Transcripción Whisper Local:} El modelo \texttt{base} transcribe y alinea temporalmente los 4 minutos de audio en aproximadamente $12\text{ segundos}$ en CPU local, operando en paralelo con la segmentación visual.
+    \item \textbf{Vectorización en Gemini API (Etapa 1):} La llamada remota para generar el embedding fusionado de 3072 dimensiones presenta una latencia media de $650\text{ ms}$ por fragmento.
+    \item \textbf{Búsqueda Vectorial en Qdrant (Etapa 1):} La consulta sobre el grafo HNSW se completa en $1,14\text{ ms}$ para $d=3072$ y se reduce a **$0,63\text{ ms}$ para $d=768$** (aceleración del $44,4\%$).
+    \item \textbf{Verificación con Árbitro Bimodal (Etapa 2):} La llamada concurrente asíncrona a \textit{Gemini 3.5 Flash Lite} para evaluar y clasificar los 5 mejores candidatos requiere una latencia media de $1,4\text{ s}$, compatible con interfaces de usuario interactivas.
+\end{itemize}
+
+\subsubsection{Escalabilidad de la Huella de Almacenamiento Vectorial}
+El Cuadro~\ref{tab:escalabilidad_memoria_mrl} proyecta la memoria física requerida para indexar colecciones audiovisuales de diferentes órdenes de magnitud bajo representación en coma flotante de 32 bits (\texttt{float32}).
+
+\begin{table}[htbp]
+\centering
+\small
+\setlength{\tabcolsep}{4.0pt}
+\caption{Proyección de memoria vectorial en función del volumen de metraje y la dimensión MRL.}
+\label{tab:escalabilidad_memoria_mrl}
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Escala del Catálogo} & \textbf{Fragmentos} & \begin{tabular}[c]{@{}c@{}}\textbf{Duración}\\\textbf{Aprox.}\end{tabular} & \begin{tabular}[c]{@{}c@{}}\textbf{Memoria}\\\textbf{($d=3072$)}\end{tabular} & \begin{tabular}[c]{@{}c@{}}\textbf{Memoria}\\\textbf{($d=1536$)}\end{tabular} & \begin{tabular}[c]{@{}c@{}}\textbf{Memoria}\\\textbf{($d=768$)}\end{tabular} \\
+\midrule
+\textbf{Banco de Pruebas Actual} & 164 & $\sim 8,1\text{ min}$ & $1,92\text{ MB}$ & $0,96\text{ MB}$ & $\mathbf{0,48\text{ MB}}$ ($-75\%$) \\
+\textbf{Curso o Documental} & $10.000$ & $\sim 8,3\text{ horas}$ & $117,19\text{ MB}$ & $58,59\text{ MB}$ & $\mathbf{29,30\text{ MB}}$ ($-75\%$) \\
+\textbf{Archivo Departamental} & $100.000$ & $\sim 83,3\text{ horas}$ & $1,14\text{ GB}$ & $585,94\text{ MB}$ & $\mathbf{292,97\text{ MB}}$ ($-75\%$) \\
+\textbf{Plataforma Corporativa} & $1.000.000$ & $\sim 833,3\text{ horas}$ & $11,44\text{ GB}$ & $5,72\text{ GB}$ & $\mathbf{2,86\text{ GB}}$ ($-75\%$) \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+La compresión a $d=768$ dimensiones permite alojar un millón de fragmentos de vídeo (más de 800 horas de contenido) en apenas $2,86\text{ GB}$ de memoria RAM, haciendo viable el despliegue de motores de búsqueda de vídeo de escala empresarial sobre instancias de servidor estándar de bajo coste.
+
+\subsubsection{Discusión y Recomendaciones de Diseño}
+La combinación de las evidencias experimentales obtenidas a lo largo de este estudio permite formular una recomendación arquitectónica definitiva:
+\begin{enumerate}
+    \item La configuración óptima de compromiso es **$d = 768$ dimensiones**. Retiene el $98,8\%$ de la precisión en primera posición, mejora el \textit{Recall@5} hasta el $99,02\%$, reduce la huella de memoria un $75\%$ y acelera las consultas vectoriales un $44,4\%$.
+    \item La arquitectura de recuperación en dos etapas resuelve la limitación intrínseca de los modelos de embeddings: la primera etapa aporta velocidad y alta exhaustividad (\textit{Recall@5} $\ge 97\%$), mientras que la segunda etapa aporta capacidad de razonamiento multimodal, eliminando los falsos positivos y elevando la precisión final por encima del $93\%$.
+\end{enumerate}

@@ -1,0 +1,25 @@
+\subsection{Entorno Experimental, Infraestructura y Gestión de Cuotas}
+\label{subsec:entorno_experimental_infraestructura}
+
+Para garantizar la validez externa y la reproducibilidad de los resultados empíricos, esta subsección describe la infraestructura de cómputo, las librerías fundamentales del entorno de ejecución y las políticas de mitigación de cuotas de inferencia implementadas en el prototipo.
+
+\subsubsection{Plataforma de Ejecución y Pila Tecnológica}
+Los experimentos y el desarrollo del prototipo se ejecutaron sobre una estación de trabajo con procesador Apple Silicon (arquitectura ARM64), $16\text{ GB}$ de memoria unificada y sistema operativo macOS, utilizando el entorno de ejecución Python 3.10+. La pila de software científico y librerías especializadas comprende:
+\begin{itemize}
+    \item \textbf{Procesamiento Audiovisual:} \texttt{OpenCV} (\texttt{opencv-python}) para la decodificación de metraje, cálculo matricial del índice SSIM y compresión JPEG; \texttt{ffmpeg} para el remuestreo de audio; y \texttt{openai-whisper} (modelo \texttt{base}) para el reconocimiento automático del habla (ASR) ejecutado localmente en CPU.
+    \item \textbf{Modelos Fundacionales y APIs:} SDK oficial \texttt{google-genai} para la interacción con los puntos de acceso de \textit{Gemini Embedding 2} (\texttt{gemini-embedding-2-preview}) y \textit{Gemini 3.5 Flash Lite} (\texttt{gemini-3.5-flash-lite}).
+    \item \textbf{Indexación Vectorial:} \texttt{qdrant-client} en modo local persistente en disco (\texttt{./data/vector\_db}), evitando la sobrecarga de latencia de red y garantizando aislamiento experimental.
+    \item \textbf{Cálculo Numérico y Evaluación:} \texttt{NumPy} para el truncamiento dimensional y normalización $L_2$ bajo el estándar MRL, y \texttt{pytest} como motor de ejecución para las suites de prueba automatizadas.
+\end{itemize}
+
+\subsubsection{Gestión de Cuotas y Cortafuegos de Seguridad (\textit{Quota Firewall})}
+La capa gratuita de la API de Google Gemini impone restricciones severas que condicionan el diseño de cualquier sistema experimental en tiempo real: un máximo de $100$ peticiones por minuto (RPM), $30.000$ tokens por minuto (TPM) y $1.000$ peticiones diarias (RPD) \cite{gemini_emb2_docs}.
+
+Para operar de manera continua sin interrumpir los experimentos por denegación de servicio (código HTTP 429 / \texttt{RESOURCE\_EXHAUSTED}), se implementaron dos salvaguardas arquitectónicas:
+\begin{enumerate}
+    \item \textbf{Reintentos Exponenciales con Dispersión (\textit{Exponential Backoff with Jitter}):} Toda llamada remota a la API se canaliza a través de la función utilitaria \texttt{call\_with\_retry}. Ante errores transitorios de cuota o sobrecarga de red, el cliente aplica una pausa adaptativa con retardo base de $4,0\text{ s}$ para vectorización y $1,5\text{ s}$ para reordenación, incrementándose exponencialmente con un factor de aleatoriedad hasta un máximo de 4 reintentos antes de elevar una excepción controlada (\texttt{VectorizationError}).
+    \item \textbf{Cortafuegos de Cuota por Vídeo (\texttt{QuotaSafetyError}):} Antes de enviar fragmentos a vectorizar, el orquestador valida que el número total de fragmentos detectados por el segmentador visual no supere la cota de seguridad $\text{MAX\_CHUNKS\_PER\_VIDEO} = 800$. Si un vídeo excesivamente largo o con hiperfragmentación visual supera dicho umbral, el proceso aborta preventivamente antes de emitir llamadas a la API, impidiendo el agotamiento accidental de la cuota diaria del investigador.
+\end{enumerate}
+
+\subsubsection{Configuración de Colecciones en Qdrant}
+La base vectorial local almacena los fragmentos indexados en colecciones parametrizadas. Cada colección se configura utilizando la métrica de distancia coseno (\texttt{Distance.COSINE}) sobre vectores de dimensión $d \in \mathcal{D}_{\text{MRL}}$. Junto a cada vector se indexa un \textit{payload} documental con metadatos de filtrado: nombre del archivo de vídeo, índice secuencial del fragmento, intervalo temporal $[t_{\text{start}}, t_{\text{end}}]$ y transcripción textual completa, habilitando la recuperación conjunta de contenido visual y textual en una única consulta HNSW.

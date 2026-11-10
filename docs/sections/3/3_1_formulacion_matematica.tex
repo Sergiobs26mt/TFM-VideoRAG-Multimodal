@@ -1,0 +1,43 @@
+\subsection{Formalización Matemática del Espacio Latente Multimodal y Representaciones Matryoshka}
+\label{subsec:formulacion_matematica_mrl}
+
+La arquitectura propuesta proyecta datos no estructurados de naturalezas heterogéneas (vídeo, audio y texto) en un espacio métrico continuo unificado $\mathcal{S} \subseteq \mathbb{R}^D$, donde $D = 3072$ representa la dimensionalidad nativa del modelo fundacional \textit{Gemini Embedding 2} \cite{gemini_emb2_docs}.
+
+\subsubsection{Espacio de Ingesta y Proyección Omnimodal}
+Sea un flujo de vídeo segmentado temporalmente en una secuencia ordenada de fragmentos visuales $\{C_1, C_2, \dots, C_N\}$. Cada fragmento $C_i$ queda definido por una tupla multimodal:
+\begin{equation}
+    C_i = \left( \mathcal{F}_i, \tau_i \right)
+\end{equation}
+donde $\mathcal{F}_i = \{f_{i,1}, f_{i,2}, f_{i,3}\} \subset \mathbb{R}^{H \times W \times 3}$ corresponde al conjunto ordenado de tres fotogramas clave representativos del plano visual (fotogramas inicial, intermedio y final), y $\tau_i \in \mathcal{T}$ denota la transcripción fonética continua alineada temporalmente con dicho intervalo.
+
+La función de incrustación omnimodal $\mathcal{E}: \left( (\mathbb{R}^{H \times W \times 3})^3 \times \mathcal{T} \right) \to \mathbb{R}^D$ transforma la tupla $C_i$ en un vector denso latente $\mathbf{v}_i$:
+\begin{equation}
+    \mathbf{v}_i = \mathcal{E}(\mathcal{F}_i, \tau_i), \quad \|\mathbf{v}_i\|_2 = 1, \quad \mathbf{v}_i \in \mathbb{S}^{D-1}
+\end{equation}
+donde $\mathbb{S}^{D-1}$ denota la hiperesfera unitaria en $\mathbb{R}^D$. De manera análoga, una consulta multimodal arbitraria $\mathcal{Q}$ (compuesta por cualquier combinación no vacía de texto libre $t_q$, imágenes de referencia $\{I_{q,j}\}$ y señales auditivas transcritas $\tau_q$) es proyectada por la misma función en el vector unitario $\mathbf{q} \in \mathbb{S}^{D-1}$:
+\begin{equation}
+    \mathbf{q} = \mathcal{E}(\mathcal{Q}), \quad \|\mathbf{q}\|_2 = 1
+\end{equation}
+
+\subsubsection{Representaciones Anidadas Matryoshka (MRL)}
+A fin de optimizar el consumo de memoria en memoria principal y acelerar las operaciones de búsqueda aproximada sobre grafos jerárquicos (HNSW), el sistema adopta el paradigma \textit{Matryoshka Representation Learning} (MRL) \cite{kusupati2022matryoshka}. MRL entrena el codificador imponiendo una función de pérdida multi-escala que fuerza a los primeros $d$ componentes del vector a concentrar la máxima varianza y capacidad discriminativa semántica.
+
+Formalmente, para cualquier dimensión objetivo admisible $d \in \mathcal{D}_{\text{MRL}} = \{128, 256, 512, 768, 1536, 3072\}$, se define el operador de truncamiento $\pi_d: \mathbb{R}^D \to \mathbb{R}^d$ que selecciona el prefijo inicial del vector:
+\begin{equation}
+    \pi_d(\mathbf{v}) = (v_1, v_2, \dots, v_d)^T
+\end{equation}
+
+Dado que la operación de corte altera la norma euclídea del vector ($\|\pi_d(\mathbf{v})\|_2 \le 1$), es imperativo aplicar una proyección normalizadora $L_2$ para preservar la coherencia geométrica de la similitud del coseno:
+\begin{equation}
+    \mathcal{P}_d(\mathbf{v}) = \begin{cases}
+        \dfrac{\pi_d(\mathbf{v})}{\|\pi_d(\mathbf{v})\|_2}, & \text{si } \|\pi_d(\mathbf{v})\|_2 > 0 \\
+        \pi_d(\mathbf{v}), & \text{en caso contrario}
+    \end{cases}
+\end{equation}
+
+Bajo esta transformación, la métrica de similitud entre una consulta $\mathbf{q}$ y un candidato $\mathbf{v}$ en el subespacio $d$-dimensional equivale al producto escalar estándar:
+\begin{equation}
+    S_d(\mathbf{q}, \mathbf{v}) = \langle \mathcal{P}_d(\mathbf{q}), \mathcal{P}_d(\mathbf{v}) \rangle = \sum_{j=1}^d \mathcal{P}_d(\mathbf{q})_j \cdot \mathcal{P}_d(\mathbf{v})_j
+\end{equation}
+
+Esta formulación garantiza que un único índice vectorial pueda ser consultado a múltiples resoluciones de granularidad dimensional sin necesidad de re-entrenar ni re-vectorizar el corpus audiovisual.

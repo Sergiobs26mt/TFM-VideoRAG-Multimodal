@@ -1,0 +1,15 @@
+\section{Metodología y Propuesta Arquitectónica}
+\label{sec:metodologia_arquitectura}
+
+En esta sección se detalla la metodología científica y el diseño formal de la arquitectura propuesta para la recuperación de eventos en vídeo de larga duración sin metadatos previos. Se formaliza matemáticamente el espacio latente omnimodal y el truncamiento adaptativo mediante \textit{Matryoshka Representation Learning} (MRL). A continuación, se presenta la canalización de ingesta adaptativa basada en la detección de planos por similitud estructural (SSIM), alineación forzada de locución fonética y fusión temprana en una solicitud única. Posteriormente, se expone el motor de búsqueda en dos etapas (recuperación aproximada densa con deduplicación temporal y verificación bimodal asistida por LLM). Por último, se describen los contratos formales del modelo de dominio inmutable y el subsistema de auditoría integral para garantizar la reproducibilidad experimental.
+
+\input{sections/3/3_1_formulacion_matematica}
+\newpage
+
+\input{sections/3/3_2_pipeline_fasion_temprana}
+\newpage
+
+\input{sections/3/3_3_recuperacion_dos_etapas}
+\newpage
+
+\input{sections/3/3_4_modelo_datos_inmutable}

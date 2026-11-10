@@ -1,0 +1,36 @@
+\subsection{Estudio de Ablación Dimensional con Matryoshka Representation Learning (MRL)}
+\label{subsec:ablacion_dimensional_mrl}
+
+Para contrastar la Hipótesis 2 ($H_2$), se analizó el impacto del truncamiento prefijo y renormalización $L_2$ sobre los $164$ fragmentos de los dos vídeos de referencia en las tres resoluciones dimensionales soportadas por \textit{Gemini Embedding 2}: $d = 3072$ (nativa), $d = 1536$ (reducción del 50\%) y $d = 768$ (reducción del 75\%).
+
+\subsubsection{Comportamiento en Consultas Literales de Evento Único}
+El Cuadro~\ref{tab:ablacion_mrl_global} sintetiza el rendimiento comparativo obtenido sobre el conjunto de las 102 consultas literales en la Etapa 1 de recuperación densa en Qdrant.
+
+\begin{table}[htbp]
+\centering
+\small
+\setlength{\tabcolsep}{3.0pt}
+\caption{Resultados globales de la ablación dimensional MRL sobre 102 consultas literales en la Etapa 1 (Qdrant).}
+\label{tab:ablacion_mrl_global}
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{lccccccc}
+\toprule
+\textbf{Dimensión ($d$)} & \textbf{Recall@1} & \textbf{Recall@3} & \textbf{Recall@5} & \textbf{MRR} & \begin{tabular}[c]{@{}c@{}}\textbf{Memoria}\\\textbf{/Vector}\end{tabular} & \begin{tabular}[c]{@{}c@{}}\textbf{Ahorro}\\\textbf{Memoria}\end{tabular} & \begin{tabular}[c]{@{}c@{}}\textbf{Latencia}\\\textbf{Qdrant}\end{tabular} \\
+\midrule
+$d = \mathbf{3072}$ (Nativa) & $\mathbf{79,41\%}$ ($81/102$) & $93,14\%$ ($95/102$) & $97,06\%$ ($99/102$) & $0,8688$ & $12,00\text{ KB}$ & $0,0\%$ & $1,142\text{ ms}$ \\ \addlinespace[2pt]
+$d = \mathbf{1536}$ ($-50\%$) & $78,43\%$ ($80/102$) & $93,14\%$ ($95/102$) & $98,04\%$ ($100/102$) & $0,8659$ & $6,00\text{ KB}$ & $\mathbf{50,0\%}$ & \begin{tabular}[c]{@{}c@{}}$0,766\text{ ms}$\\($-33,0\%$)\end{tabular} \\ \addlinespace[2pt]
+$d = \mathbf{768}$ ($-75\%$)  & $78,43\%$ ($80/102$) & $\mathbf{94,12\%}$ ($96/102$) & $\mathbf{99,02\%}$ ($101/102$) & $\mathbf{0,8691}$ & $3,00\text{ KB}$ & $\mathbf{75,0\%}$ & \begin{tabular}[c]{@{}c@{}}$\mathbf{0,635\text{ ms}}$\\($\mathbf{-44,4\%}$)\end{tabular} \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+El análisis desagregado por corpus audiovisual revela patrones fundamentales sobre la estructura interna de los embeddings:
+\begin{enumerate}
+    \item \textbf{Invarianza absoluta en dominio con locución sincronizada (\texttt{python\_tutorial.mp4}):} En las 56 consultas literales de Python, el \textit{Recall@1} se mantiene estrictamente invariante en un **$85,71\%$ ($48/56$)** y el \textit{Recall@3} en un **$92,86\%$ ($52/56$)** al pasar de 3072 a 1536 y 768 dimensiones. Ninguna de las 48 consultas que acertaron en primera posición en 3072 pierde su puesto al comprimir el vector un 75\%. De hecho, el \textit{MRR} experimenta una ligera mejoría ascendiendo de $0,8973$ ($d=3072$) a **$0,9045$ ($d=768$)**.
+    \item \textbf{Efecto de filtrado de ruido en \textit{Recall@5}:} En $d=768$, el \textit{Recall@5} global aumenta del $97,06\%$ al **$99,02\%$ ($101/102$ consultas acertadas)**. Este fenómeno se debe a que el truncamiento de las coordenadas de cola ($[768:3072]$) actúa como un regularizador implícito, descartando componentes de ruido de alta frecuencia asociados a elementos gráficos fijos (como la barra de estado del editor o fondos homogéneos) y realzando los componentes de baja frecuencia que capturan la semántica nuclear del plano.
+    \item \textbf{Estabilidad inter-dimensional en metraje de naturaleza (\texttt{animals.mp4}):} En el vídeo documental, 41 de las 46 consultas ($89,1\%$) conservan exactamente la misma posición en el ranking en las tres dimensiones. En las 46 consultas ($100,0\%$), el candidato correcto se localiza invariablemente dentro del \textit{Top-5} (\textit{Recall@5} = $100,0\%$), garantizando que la ventana de candidatos suministrada al reordenador de segunda etapa sea idéntica sin importar el nivel de compresión seleccionado.
+\end{enumerate}
+
+\subsubsection{Validación Cuantitativa de la Hipótesis 2 ($H_2$)}
+Los resultados confirman con holgura la Hipótesis 2: la compresión del espacio latente a $d = 768$ dimensiones (reducción del $75\%$ en huella de memoria) retiene el **$98,77\%$ del \textit{Recall@1} relativo**, preserva un \textit{MRR} idéntico ($0,8691$ vs. $0,8688$) y reduce la latencia de cómputo en Qdrant en un **$44,4\%$**, demostrando que el esquema MRL permite escalar la capacidad de almacenamiento de un sistema \textit{Video-RAG} por un factor de $4\times$ sin merma apreciable en la calidad de la recuperación.

@@ -1,0 +1,42 @@
+\subsection{Evaluación Empírica de la Integración Audio-Visual y Verificación Bimodal}
+\label{subsec:evaluacion_audio_visual_e2e}
+
+Esta subsección aborda directamente la Pregunta de Investigación 1 (\textbf{RQ1}) y la Hipótesis 1 ($H_1$), evaluando el beneficio de la fusión temprana de la pista de voz alineada frente a la línea base puramente visual, así como el papel corrector del juez bimodal de segunda etapa.
+
+\subsubsection{Comparativa de Rendimiento: Línea Base Visual frente a Fusión Bimodal}
+El Cuadro~\ref{tab:ablacion_visual_vs_audio_consolidado} expone las métricas comparativas entre la arquitectura puramente visual (3 fotogramas clave por plano) y la arquitectura bimodal completa (3 fotogramas + transcripción Whisper alineada + verificación bimodal con \textit{Gemini 3.5 Flash Lite}) en los dos dominios audiovisuales evaluados.
+
+\begin{table}[htbp]
+\centering
+\small
+\setlength{\tabcolsep}{4.0pt}
+\caption{Comparativa empírica entre la arquitectura puramente visual y la canalización bimodal con fusión temprana de audio y verificación en dos etapas.}
+\label{tab:ablacion_visual_vs_audio_consolidado}
+\begin{tabular}{lllccc}
+\toprule
+\textbf{Corpus de Vídeo} & \textbf{Etapa del Sistema} & \textbf{Métrica de IR} & \textbf{Línea Base Visual} & \textbf{Fusión Bimodal} & \textbf{Variación} \\
+\midrule
+\texttt{python\_tutorial.mp4} & Etapa 1 (Qdrant) & \textit{Recall@1} & $67,9\%$ ($38/56$) & $\mathbf{85,7\%}$ ($48/56$) & $\mathbf{+17,8\text{ pp}}$ \\
+\texttt{python\_tutorial.mp4} & Etapa 1 (Qdrant) & \textit{Recall@3} & $87,5\%$ ($49/56$) & $\mathbf{92,9\%}$ ($52/56$) & $\mathbf{+5,4\text{ pp}}$ \\
+\texttt{python\_tutorial.mp4} & Etapa 1 (Qdrant) & \textit{MRR} & $0,779$ & $\mathbf{0,897}$ & $\mathbf{+0,118}$ \\ \addlinespace[2.5pt]
+\texttt{python\_tutorial.mp4} & Etapa 2 (Juez Bimodal) & \textit{Recall@1} & $80,4\%$ ($45/56$) & $\mathbf{89,3\%}$ ($50/56$) & $\mathbf{+8,9\text{ pp}}$ \\
+\texttt{python\_tutorial.mp4} & Etapa 2 (Juez Bimodal) & \textit{MRR} & $0,848$ & $\mathbf{0,911}$ & $\mathbf{+0,063}$ \\
+\midrule
+\texttt{animals.mp4} & Etapa 1 (Qdrant) & \textit{Recall@1} & $\mathbf{80,4\%}$ ($37/46$) & $71,7\%$ ($33/46$) & $-8,7\text{ pp}$ \\
+\texttt{animals.mp4} & Etapa 1 (Qdrant) & \textit{Recall@5} & $95,7\%$ ($44/46$) & $\mathbf{100,0\%}$ ($46/46$) & $\mathbf{+4,3\text{ pp}}$ \\ \addlinespace[2.5pt]
+\texttt{animals.mp4} & Etapa 2 (Juez Bimodal) & \textit{Recall@1} & $89,1\%$ ($41/46$) & $\mathbf{93,5\%}$ ($43/46$) & $\mathbf{+4,4\text{ pp}}$ \\
+\texttt{animals.mp4} & Etapa 2 (Juez Bimodal) & \textit{Recall@5} & $93,5\%$ ($43/46$) & $\mathbf{97,8\%}$ ($45/46$) & $\mathbf{+4,3\text{ pp}}$ \\
+\texttt{animals.mp4} & Etapa 2 (Juez Bimodal) & \textit{MRR} & $0,913$ & $\mathbf{0,951}$ & $\mathbf{+0,038}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{Discusión de Fenómenos Perceptuales}
+Los datos empíricos revelan dos dinámicas fundamentales:
+\begin{enumerate}
+    \item \textbf{Convergencia Modal en Metraje Educativo:} En \texttt{python\_tutorial.mp4}, la inyección de la locución hablada produce una ganancia masiva de $+17,8$ puntos porcentuales en \textit{Recall@1} en la primera etapa ($67,9\% \to 85,7\%$). La coincidencia temporal entre el código tecleado y la explicación oral del ponente refuerza la densidad direccional del embedding omnimodal, posicionando 10 consultas adicionales directamente en el primer lugar del ranking sin requerir reordenación. Tras la actuación del verificador en la Etapa 2, el \textit{Recall@1} alcanza el **$89,3\%$ ($50/56$)** con un \textit{MRR} de **$0,911$**.
+    \item \textbf{Compensación Asimétrica ante Metraje Desacoplado (\textit{B-roll}):} En \texttt{animals.mp4}, donde la narración verbal describe conceptos biológicos mientras la cámara enfoca especies que no son mencionadas por su nombre, la fusión de audio induce una leve desviación en la primera etapa ($\Delta\text{\textit{Recall@1}} = -8,7\text{ pp}$). Sin embargo, la cobertura en \textit{Recall@5} asciende al **$100,0\%$ ($46/46$)**, garantizando que el fragmento correcto jamás es descartado por el motor vectorial. Posteriormente, el árbitro bimodal de Etapa 2 analiza de forma disjunta la evidencia visual y auditiva, corrigiendo por completo el desfase y alcanzando un récord de **$93,5\%$ de \textit{Recall@1}** ($43/46$) y un **$97,8\%$ de \textit{Recall@5}** con un \textit{MRR} de **$0,951$**.
+\end{enumerate}
+
+\subsubsection{Validación Cuantitativa de la Hipótesis 1 ($H_1$)}
+Se confirma plenamente la Hipótesis 1: la fusión temprana audio-visual incrementa sustancialmente la precisión en contenidos sincronizados (+17,8 pp en \textit{Recall@1}) y, combinada con la verificación bimodal de segunda etapa, neutraliza el desacoplamiento en secuencias de tipo \textit{B-roll}, superando a la línea base visual en ambos dominios audiovisuales.
