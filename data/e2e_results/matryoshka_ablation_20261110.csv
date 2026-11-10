@@ -1,0 +1,7 @@
+video_name,dimension,num_chunks,total_queries,recall_at_1,recall_at_3,recall_at_5,mrr,bytes_per_vector,kb_per_vector,total_vectors_kb,storage_savings_pct,mean_search_ms
+python_tutorial.mp4,3072,82,56,0.8571,0.9286,0.9464,0.8973,12288,12.00,984.00,0.0,1.1688
+python_tutorial.mp4,1536,82,56,0.8571,0.9286,0.9643,0.9009,6144,6.00,492.00,50.0,0.7502
+python_tutorial.mp4,768,82,56,0.8571,0.9286,0.9821,0.9045,3072,3.00,246.00,75.0,0.6297
+animals.mp4,3072,82,46,0.7174,0.9348,1.0000,0.8341,12288,12.00,984.00,0.0,1.1104
+animals.mp4,1536,82,46,0.6957,0.9348,1.0000,0.8232,6144,6.00,492.00,50.0,0.7848
+animals.mp4,768,82,46,0.6957,0.9565,1.0000,0.8261,3072,3.00,246.00,75.0,0.6418

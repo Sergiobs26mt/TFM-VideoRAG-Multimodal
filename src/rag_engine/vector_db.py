@@ -50,11 +50,26 @@ class QdrantSearchEngine:
         except Exception as exc:  # Qdrant local puede fallar por bloqueo de fichero, etc.
             raise VectorDBError(f"No se pudo inicializar Qdrant: {exc}") from exc
 
+    def get_collection_vector_size(self) -> int | None:
+        """Devuelve la dimensión configurada en la colección activa o ``None`` si no existe."""
+        try:
+            if not self._client.collection_exists(self._collection):
+                return None
+            info = self._client.get_collection(self._collection)
+            vectors_cfg = info.config.params.vectors
+            if isinstance(vectors_cfg, models.VectorParams):
+                return int(vectors_cfg.size)
+            return None
+        except (UnexpectedResponse, ValueError, OSError) as exc:
+            raise VectorDBError(
+                f"Error al consultar la dimensión de la colección: {exc}"
+            ) from exc
+
     def create_collection(self, vector_size: int = VECTOR_SIZE, recreate: bool = False) -> None:
         """Crea la colección con métrica de similitud del coseno.
 
         Args:
-            vector_size: Dimensión de los embeddings (p. ej. 768 o 3072).
+            vector_size: Dimensión de los embeddings (p. ej. 768, 1536 o 3072).
             recreate: Si es ``True`` borra y recrea la colección existente.
 
         Raises:
@@ -66,8 +81,20 @@ class QdrantSearchEngine:
         try:
             exists = self._client.collection_exists(self._collection)
             if exists and not recreate:
-                logger.info("La colección '%s' ya existe", self._collection)
-                return
+                current_size = self.get_collection_vector_size()
+                if current_size == vector_size:
+                    logger.info(
+                        "La colección '%s' ya existe (dim=%d)",
+                        self._collection,
+                        vector_size,
+                    )
+                    return
+                logger.info(
+                    "Recreando colección '%s' por cambio de dimensión (%s -> %d)",
+                    self._collection,
+                    current_size,
+                    vector_size,
+                )
             if exists:
                 self._client.delete_collection(self._collection)
             self._client.create_collection(
@@ -159,6 +186,51 @@ class QdrantSearchEngine:
             return sorted(videos)
         except (UnexpectedResponse, ValueError, OSError) as exc:
             raise VectorDBError(f"Error al obtener vídeos indexados: {exc}") from exc
+
+    def get_video_chunks_with_vectors(self, video_name: str) -> list[VectorizedChunk]:
+        """Recupera todos los chunks almacenados de un vídeo junto con sus vectores de embedding."""
+        try:
+            if not self._client.collection_exists(self._collection):
+                return []
+            points, _ = self._client.scroll(
+                collection_name=self._collection,
+                scroll_filter=models.Filter(
+                    must=[
+                        models.FieldCondition(
+                            key="video_name",
+                            match=models.MatchValue(value=video_name),
+                        )
+                    ]
+                ),
+                limit=10000,
+                with_payload=True,
+                with_vectors=True,
+            )
+            chunks: list[VectorizedChunk] = []
+            for point in points:
+                payload = point.payload or {}
+                raw_vec = point.vector
+                if not isinstance(raw_vec, list):
+                    continue
+                embedding = [
+                    float(x) for x in raw_vec if isinstance(x, (int, float))
+                ]
+                raw_tr = payload.get("transcript")
+                chunks.append(
+                    VectorizedChunk(
+                        index=int(payload.get("chunk_index", 0)),
+                        start_time=float(payload.get("start_time", 0.0)),
+                        end_time=float(payload.get("end_time", 0.0)),
+                        embedding=embedding,
+                        transcript=str(raw_tr) if raw_tr is not None else None,
+                    )
+                )
+            chunks.sort(key=lambda c: c.index)
+            return chunks
+        except (UnexpectedResponse, ValueError, OSError) as exc:
+            raise VectorDBError(
+                f"Error al recuperar chunks de '{video_name}': {exc}"
+            ) from exc
 
     def _delete_video_points(self, video_name: str) -> None:
         """Elimina exclusivamente los puntos de un vídeo en Qdrant."""

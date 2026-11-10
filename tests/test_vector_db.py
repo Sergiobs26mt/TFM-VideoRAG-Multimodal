@@ -157,3 +157,38 @@ def test_insert_and_search_persists_transcript() -> None:
     assert results[1].chunk_index == 1
     assert results[1].transcript is None
 
+
+def test_create_collection_recreates_when_vector_size_changes() -> None:
+    engine = QdrantSearchEngine(path=None)
+    assert engine.get_collection_vector_size() is None
+
+    engine.create_collection(vector_size=3)
+    assert engine.get_collection_vector_size() == 3
+    engine.insert_chunks([VectorizedChunk(0, 0.0, 2.0, [1.0, 0.0, 0.0])], "v.mp4")
+
+    engine.create_collection(vector_size=2, recreate=False)
+    assert engine.get_collection_vector_size() == 2
+    assert engine.get_indexed_videos() == []
+    assert engine.insert_chunks([VectorizedChunk(0, 0.0, 2.0, [1.0, 0.0])], "v2.mp4") == 1
+
+
+def test_get_video_chunks_with_vectors_returns_sorted_chunks() -> None:
+    engine = _engine()
+    chunks = [
+        VectorizedChunk(2, 4.0, 6.0, [0.0, 0.0, 1.0], transcript="tercero"),
+        VectorizedChunk(0, 0.0, 2.0, [1.0, 0.0, 0.0], transcript="primero"),
+        VectorizedChunk(1, 2.0, 4.0, [0.0, 1.0, 0.0], transcript=None),
+    ]
+    engine.insert_chunks(chunks, video_name="demo.mp4")
+    engine.insert_chunks(
+        [VectorizedChunk(0, 0.0, 1.0, [1.0, 0.0, 0.0])], video_name="other.mp4"
+    )
+
+    recovered = engine.get_video_chunks_with_vectors("demo.mp4")
+    assert [c.index for c in recovered] == [0, 1, 2]
+    assert recovered[0].transcript == "primero"
+    assert recovered[1].transcript is None
+    assert recovered[2].embedding == pytest.approx([0.0, 0.0, 1.0])
+
+
+

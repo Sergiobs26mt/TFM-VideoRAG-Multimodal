@@ -12,8 +12,14 @@ import pytest
 from src.models import RerankedResult, SearchResult, VectorizedChunk
 from src.rag_engine.evaluation import (
     GroundTruthQuery,
+    MatryoshkaDimensionMetrics,
+    MatryoshkaMultiTargetMetrics,
+    MatryoshkaNegativeMetrics,
     MultiTargetQuery,
     compute_benchmark_summary,
+    evaluate_matryoshka_dimensions,
+    evaluate_matryoshka_multi_target,
+    evaluate_matryoshka_negative,
     evaluate_multi_target_results,
     evaluate_negative_results,
     evaluate_search_results,
@@ -22,6 +28,9 @@ from src.rag_engine.evaluation import (
     run_benchmark,
     run_multi_target_benchmark,
     run_negative_benchmark,
+    write_matryoshka_ablation_csv,
+    write_matryoshka_multi_target_csv,
+    write_matryoshka_negative_csv,
 )
 from src.rag_engine.service import VideoRAGService
 from src.rag_engine.vector_db import QdrantSearchEngine
@@ -75,6 +84,7 @@ def test_compute_benchmark_summary_calculates_recall_and_mrr() -> None:
     summary = compute_benchmark_summary([ev1, ev2, ev3], top_k=3, rerank=False)
     assert summary.total_queries == 3
     assert summary.recall_at_1 == pytest.approx(1.0 / 3.0)
+    assert summary.recall_at_3 == pytest.approx(2.0 / 3.0)
     assert summary.recall_at_k == pytest.approx(2.0 / 3.0)
     assert summary.mrr == pytest.approx(0.5)
     assert summary.mean_latency_seconds == pytest.approx(0.2)
@@ -319,6 +329,125 @@ def test_harness_complex_reports_serialize_multi_target_and_negative_metrics(
     neg_csv = tmp_path / "neg.csv"
     write_negative_report(neg_csv, [neg_plain], [neg_rerank])
     assert neg_csv.is_file()
+
+
+def test_evaluate_matryoshka_dimensions_and_csv_export(tmp_path: Path) -> None:
+    vec_a = [1.0 if i == 0 else 0.0 for i in range(3072)]
+    vec_b = [1.0 if i == 1 else 0.0 for i in range(3072)]
+    chunks = [
+        VectorizedChunk(0, 0.0, 5.0, vec_a, transcript="chunk a"),
+        VectorizedChunk(1, 5.0, 10.0, vec_b, transcript="chunk b"),
+    ]
+    dataset = [
+        GroundTruthQuery("buscar a", "demo.mp4", 0.0, 5.0),
+        GroundTruthQuery("buscar b", "demo.mp4", 5.0, 10.0),
+    ]
+    query_vectors = {
+        "buscar a": vec_a,
+        "buscar b": vec_b,
+    }
+
+    metrics = evaluate_matryoshka_dimensions(
+        video_name="demo.mp4",
+        chunks_3072=chunks,
+        dataset=dataset,
+        query_vectors_3072=query_vectors,
+        dimensions=(3072, 1536, 768),
+        top_k=5,
+    )
+    assert len(metrics) == 3
+    assert [m.dimension for m in metrics] == [3072, 1536, 768]
+    assert [m.bytes_per_vector for m in metrics] == [12288, 6144, 3072]
+    assert [m.kb_per_vector for m in metrics] == [12.0, 6.0, 3.0]
+    assert [m.storage_savings_pct for m in metrics] == pytest.approx([0.0, 50.0, 75.0])
+    for m in metrics:
+        assert isinstance(m, MatryoshkaDimensionMetrics)
+        assert m.recall_at_1 == pytest.approx(1.0)
+        assert m.recall_at_3 == pytest.approx(1.0)
+        assert m.recall_at_5 == pytest.approx(1.0)
+        assert m.mrr == pytest.approx(1.0)
+        assert m.mean_search_ms >= 0.0
+
+    csv_path = tmp_path / "mrl_ablation.csv"
+    write_matryoshka_ablation_csv(csv_path, metrics)
+    assert csv_path.is_file()
+    content = csv_path.read_text(encoding="utf-8")
+    assert "3072" in content and "1536" in content and "768" in content
+
+
+def test_evaluate_matryoshka_multi_target_and_negative(tmp_path: Path) -> None:
+    vec_a = [1.0 if i == 0 else 0.0 for i in range(3072)]
+    vec_b = [1.0 if i == 1 else 0.0 for i in range(3072)]
+    chunks = [
+        VectorizedChunk(0, 5.0, 10.0, vec_a, transcript="león"),
+        VectorizedChunk(1, 18.0, 23.0, vec_b, transcript="gato"),
+    ]
+    multi_queries = [
+        MultiTargetQuery("Felinos", "animals.mp4", ((5.0, 10.0), (18.0, 23.0)))
+    ]
+    neg_queries = ["Tiburón blanco"]
+    query_vectors = {
+        "Felinos": [1.0 if i in (0, 1) else 0.0 for i in range(3072)],
+        "Tiburón blanco": vec_a,
+    }
+
+    async def fake_rerank(
+        query: str, candidates: list[SearchResult]
+    ) -> list[RerankedResult]:
+        is_rel = query == "Felinos"
+        return [
+            RerankedResult(
+                result=c,
+                relevance_score=0.95 if is_rel else 0.0,
+                is_relevant=is_rel,
+                reasoning="juez",
+            )
+            for c in candidates
+        ]
+
+    multi_metrics = asyncio.run(
+        evaluate_matryoshka_multi_target(
+            video_name="animals.mp4",
+            chunks_3072=chunks,
+            queries=multi_queries,
+            query_vectors_3072=query_vectors,
+            rerank_fn=fake_rerank,
+            dimensions=(3072, 1536, 768),
+            top_k=10,
+        )
+    )
+    assert len(multi_metrics) == 3
+    for mm in multi_metrics:
+        assert isinstance(mm, MatryoshkaMultiTargetMetrics)
+        assert mm.mean_interval_recall_stage1 == pytest.approx(1.0)
+        assert mm.mean_interval_recall_stage2 == pytest.approx(1.0)
+        assert mm.mean_precision_stage2 == pytest.approx(1.0)
+
+    neg_metrics = asyncio.run(
+        evaluate_matryoshka_negative(
+            video_name="animals.mp4",
+            chunks_3072=chunks,
+            queries=neg_queries,
+            query_vectors_3072=query_vectors,
+            rerank_fn=fake_rerank,
+            dimensions=(3072, 1536, 768),
+            top_k=5,
+        )
+    )
+    assert len(neg_metrics) == 3
+    for nm in neg_metrics:
+        assert isinstance(nm, MatryoshkaNegativeMetrics)
+        assert nm.false_positives_stage1 == 2
+        assert nm.false_positives_stage2 == 0
+        assert nm.rejection_rate_stage2 == pytest.approx(1.0)
+
+    multi_csv = tmp_path / "mrl_multi.csv"
+    neg_csv = tmp_path / "mrl_neg.csv"
+    write_matryoshka_multi_target_csv(multi_csv, multi_metrics)
+    write_matryoshka_negative_csv(neg_csv, neg_metrics)
+    assert multi_csv.is_file() and neg_csv.is_file()
+
+
 
 
 

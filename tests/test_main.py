@@ -74,12 +74,15 @@ def test_parse_args_defaults() -> None:
     assert args.rerank is True
     assert args.no_audio is False
     assert args.whisper_model == "base"
+    assert args.output_dimensionality == 3072
 
     custom = main.parse_args(
         [
             "--no-audio",
             "--whisper-model",
             "small",
+            "--output-dimensionality",
+            "1536",
             "--query",
             "camaleón",
             "--query-txt",
@@ -93,6 +96,7 @@ def test_parse_args_defaults() -> None:
     )
     assert custom.no_audio is True
     assert custom.whisper_model == "small"
+    assert custom.output_dimensionality == 1536
     assert custom.query == "camaleón"
     assert custom.query_txt == ["a.txt"]
     assert custom.query_images == ["img1.jpg", "img2.png"]

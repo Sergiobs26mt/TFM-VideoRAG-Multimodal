@@ -536,6 +536,34 @@ def test_service_search_raises_value_error_when_audio_only_query_is_silent() -> 
     fake_vectorizer.embed_query.assert_not_called()
 
 
+def test_service_set_vector_size_updates_vectorizer_and_cache_key() -> None:
+    engine = QdrantSearchEngine(path=None)
+    service = VideoRAGService(engine=engine, vector_size=3072)
+    assert service.vector_size == 3072
+
+    with patch("src.rag_engine.service.GeminiMultimodalVectorizer") as mock_vec_cls:
+        vec_3072 = MagicMock()
+        vec_3072.embed_query = AsyncMock(return_value=[1.0, 0.0, 0.0])
+        vec_1536 = MagicMock()
+        vec_1536.embed_query = AsyncMock(return_value=[1.0, 0.0])
+        mock_vec_cls.side_effect = [vec_3072, vec_1536]
+
+        engine.create_collection(vector_size=3)
+        engine.insert_chunks([VectorizedChunk(0, 0.0, 2.0, [1.0, 0.0, 0.0])], "v.mp4")
+        asyncio.run(service.search("hola", rerank=False))
+
+        service.set_vector_size(1536)
+        assert service.vector_size == 1536
+        engine.create_collection(vector_size=2)
+        engine.insert_chunks([VectorizedChunk(0, 0.0, 2.0, [1.0, 0.0])], "v.mp4")
+        asyncio.run(service.search("hola", rerank=False))
+
+        assert mock_vec_cls.call_count == 2
+        assert mock_vec_cls.call_args_list[0].kwargs["output_dimensionality"] == 3072
+        assert mock_vec_cls.call_args_list[1].kwargs["output_dimensionality"] == 1536
+
+
+
 
 
 

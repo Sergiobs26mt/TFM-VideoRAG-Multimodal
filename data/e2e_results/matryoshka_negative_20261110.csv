@@ -1,0 +1,49 @@
+video_name,dimension,query,total_candidates_stage1,false_positives_stage1,false_positives_stage2,correctly_rejected_stage2
+python_tutorial.mp4,3072,Definición de una clase orientada a objetos con class y el método __init__ en Python,5,5,0,True
+python_tutorial.mp4,3072,Gráfico de barras o visualización de datos con matplotlib y pandas en un Jupyter Notebook,5,5,0,True
+python_tutorial.mp4,3072,Consulta SQL con SELECT y FROM en una base de datos PostgreSQL,5,5,0,True
+python_tutorial.mp4,3072,Instalación de paquetes con el comando pip install en la terminal,5,5,0,True
+python_tutorial.mp4,3072,Diagrama de arquitectura de redes neuronales o entrenamiento con PyTorch,5,5,0,True
+python_tutorial.mp4,3072,Página web con código HTML y estilos CSS abierta en el navegador Chrome,5,5,0,True
+python_tutorial.mp4,3072,León macho con melena descansando tumbado sobre la hierba verde,5,5,0,True
+python_tutorial.mp4,3072,Partido de fútbol en un estadio lleno de espectadores,5,5,0,True
+python_tutorial.mp4,1536,Definición de una clase orientada a objetos con class y el método __init__ en Python,5,5,0,True
+python_tutorial.mp4,1536,Gráfico de barras o visualización de datos con matplotlib y pandas en un Jupyter Notebook,5,5,0,True
+python_tutorial.mp4,1536,Consulta SQL con SELECT y FROM en una base de datos PostgreSQL,5,5,0,True
+python_tutorial.mp4,1536,Instalación de paquetes con el comando pip install en la terminal,5,5,0,True
+python_tutorial.mp4,1536,Diagrama de arquitectura de redes neuronales o entrenamiento con PyTorch,5,5,0,True
+python_tutorial.mp4,1536,Página web con código HTML y estilos CSS abierta en el navegador Chrome,5,5,0,True
+python_tutorial.mp4,1536,León macho con melena descansando tumbado sobre la hierba verde,5,5,0,True
+python_tutorial.mp4,1536,Partido de fútbol en un estadio lleno de espectadores,5,5,0,True
+python_tutorial.mp4,768,Definición de una clase orientada a objetos con class y el método __init__ en Python,5,5,0,True
+python_tutorial.mp4,768,Gráfico de barras o visualización de datos con matplotlib y pandas en un Jupyter Notebook,5,5,0,True
+python_tutorial.mp4,768,Consulta SQL con SELECT y FROM en una base de datos PostgreSQL,5,5,0,True
+python_tutorial.mp4,768,Instalación de paquetes con el comando pip install en la terminal,5,5,0,True
+python_tutorial.mp4,768,Diagrama de arquitectura de redes neuronales o entrenamiento con PyTorch,5,5,0,True
+python_tutorial.mp4,768,Página web con código HTML y estilos CSS abierta en el navegador Chrome,5,5,0,True
+python_tutorial.mp4,768,León macho con melena descansando tumbado sobre la hierba verde,5,5,0,True
+python_tutorial.mp4,768,Partido de fútbol en un estadio lleno de espectadores,5,5,0,True
+animals.mp4,3072,Tiburón blanco atacando en el océano,5,5,0,True
+animals.mp4,3072,Canguro saltando por el desierto australiano,5,5,0,True
+animals.mp4,3072,Serpiente cobra deslizándose por la arena,5,5,0,True
+animals.mp4,3072,Águila volando alto en el cielo azul,5,5,0,True
+animals.mp4,3072,Cocodrilo con las fauces abiertas en la orilla de un río,5,5,0,True
+animals.mp4,3072,Bandada de flamencos rosas en una laguna salada,5,5,0,True
+animals.mp4,3072,Camión de bomberos rojo con la sirena encendida por la calle,5,5,0,True
+animals.mp4,3072,Persona programando código en un ordenador portátil en una oficina,5,5,0,True
+animals.mp4,1536,Tiburón blanco atacando en el océano,5,5,0,True
+animals.mp4,1536,Canguro saltando por el desierto australiano,5,5,0,True
+animals.mp4,1536,Serpiente cobra deslizándose por la arena,5,5,0,True
+animals.mp4,1536,Águila volando alto en el cielo azul,5,5,0,True
+animals.mp4,1536,Cocodrilo con las fauces abiertas en la orilla de un río,5,5,0,True
+animals.mp4,1536,Bandada de flamencos rosas en una laguna salada,5,5,0,True
+animals.mp4,1536,Camión de bomberos rojo con la sirena encendida por la calle,5,5,0,True
+animals.mp4,1536,Persona programando código en un ordenador portátil en una oficina,5,5,0,True
+animals.mp4,768,Tiburón blanco atacando en el océano,5,5,0,True
+animals.mp4,768,Canguro saltando por el desierto australiano,5,5,0,True
+animals.mp4,768,Serpiente cobra deslizándose por la arena,5,5,0,True
+animals.mp4,768,Águila volando alto en el cielo azul,5,5,0,True
+animals.mp4,768,Cocodrilo con las fauces abiertas en la orilla de un río,5,5,0,True
+animals.mp4,768,Bandada de flamencos rosas en una laguna salada,5,5,0,True
+animals.mp4,768,Camión de bomberos rojo con la sirena encendida por la calle,5,5,0,True
+animals.mp4,768,Persona programando código en un ordenador portátil en una oficina,5,5,0,True

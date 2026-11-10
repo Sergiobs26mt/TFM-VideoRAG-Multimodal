@@ -154,6 +154,19 @@ class VideoRAGService:
         self._query_cache: dict[str, list[float]] = {}
         self.last_resolved_query: MultimodalQuery | None = None
 
+    @property
+    def vector_size(self) -> int:
+        """Dimensión activa de los vectores de embedding."""
+        return self._vector_size
+
+    def set_vector_size(self, vector_size: int) -> None:
+        """Actualiza la dimensión activa y reinicia el cliente vectorizador si cambia."""
+        if vector_size < 1:
+            raise ValueError("vector_size debe ser >= 1.")
+        if vector_size != self._vector_size:
+            self._vector_size = vector_size
+            self._vectorizer = None
+
     def _get_vectorizer(self) -> GeminiMultimodalVectorizer:
         if self._vectorizer is None:
             self._vectorizer = GeminiMultimodalVectorizer(
@@ -197,6 +210,7 @@ class VideoRAGService:
         """Fragmenta, vectoriza e indexa un vídeo en Qdrant."""
         video_path = self._resolve_video_file(video_path_or_name)
         dim = output_dimensionality if output_dimensionality is not None else self._vector_size
+        self.set_vector_size(dim)
 
         chunks = await process_video_pipeline(
             str(video_path),
@@ -219,10 +233,13 @@ class VideoRAGService:
         return inserted
 
     @staticmethod
-    def _build_query_cache_key(mquery: MultimodalQuery) -> str:
-        """Calcula una clave SHA-256 determinista sobre texto compuesto, imágenes y audios."""
+    def _build_query_cache_key(
+        mquery: MultimodalQuery,
+        vector_size: int = VECTOR_SIZE,
+    ) -> str:
+        """Calcula una clave SHA-256 determinista sobre dimensión, texto, imágenes y audios."""
         hasher = hashlib.sha256()
-        hasher.update(b"text:")
+        hasher.update(f"dim:{vector_size}|text:".encode())
         hasher.update(mquery.composed_text.encode("utf-8"))
         for img in mquery.images:
             hasher.update(b"|img:")
@@ -351,7 +368,9 @@ class VideoRAGService:
             else cfg.top_k
         )
         raw_fetch_k = max(fetch_k * 3, 25)
-        cache_key = self._build_query_cache_key(mquery)
+        cache_key = self._build_query_cache_key(
+            mquery, vector_size=self._vector_size
+        )
         query_vector = self._query_cache.get(cache_key)
         if query_vector is None:
             query_vector = await self._embed_multimodal_query(mquery)

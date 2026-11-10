@@ -15,6 +15,7 @@ from src.config import (
     AUDIT_DIR,
     DB_PATH,
     RAW_DIR,
+    SUPPORTED_MRL_DIMENSIONS,
     VECTOR_SIZE,
     WHISPER_MODEL,
     build_run_config,
@@ -31,6 +32,10 @@ from src.rag_engine.service import VideoRAGService, format_timestamp
 from src.utils.audit import RunAuditor
 
 logger = logging.getLogger(__name__)
+
+MRL_UI_OPTIONS: tuple[int, ...] = tuple(
+    sorted(SUPPORTED_MRL_DIMENSIONS, reverse=True)
+)
 
 
 def build_ui_run_config() -> dict[str, Any]:
@@ -239,6 +244,22 @@ def render_sidebar(
         )
 
         st.markdown("**Vectorización y Red**")
+        default_dim_idx = (
+            MRL_UI_OPTIONS.index(service.vector_size)
+            if service.vector_size in MRL_UI_OPTIONS
+            else 0
+        )
+        p_output_dimensionality = int(
+            st.selectbox(
+                "Dimensión Matryoshka (MRL)",
+                options=list(MRL_UI_OPTIONS),
+                index=default_dim_idx,
+                help=(
+                    "Dimensiones oficiales recomendadas para Gemini Embedding 2 "
+                    "(3072 nativa; 1536 y 768 truncadas con normalización L2)."
+                ),
+            )
+        )
         p_max_concurrent = st.slider(
             "Concurrencia máxima API",
             min_value=1,
@@ -292,6 +313,7 @@ def render_sidebar(
                         min_shot_frames=p_min_shot_frames,
                         entropy_stride=p_entropy_stride,
                         jpeg_quality=p_jpeg_quality,
+                        output_dimensionality=p_output_dimensionality,
                         target_width=p_target_width,
                         enable_audio=p_enable_audio,
                         whisper_model=p_whisper_model,
@@ -333,6 +355,7 @@ def render_sidebar(
                         min_shot_frames=p_min_shot_frames,
                         entropy_stride=p_entropy_stride,
                         jpeg_quality=p_jpeg_quality,
+                        output_dimensionality=p_output_dimensionality,
                         target_width=p_target_width,
                         enable_audio=p_enable_audio,
                         whisper_model=p_whisper_model,
@@ -378,6 +401,7 @@ def render_sidebar(
                         min_shot_frames=p_min_shot_frames,
                         entropy_stride=p_entropy_stride,
                         jpeg_quality=p_jpeg_quality,
+                        output_dimensionality=p_output_dimensionality,
                         target_width=p_target_width,
                         enable_audio=p_enable_audio,
                         whisper_model=p_whisper_model,

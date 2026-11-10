@@ -78,6 +78,7 @@ def test_index_video_in_ui_custom_params(tmp_path: Path) -> None:
             min_shot_frames=30,
             entropy_stride=2,
             jpeg_quality=80,
+            output_dimensionality=1536,
             target_width=640,
             enable_audio=False,
             whisper_model="small",
@@ -91,6 +92,7 @@ def test_index_video_in_ui_custom_params(tmp_path: Path) -> None:
     assert kwargs["min_shot_frames"] == 30
     assert kwargs["entropy_stride"] == 2
     assert kwargs["jpeg_quality"] == 80
+    assert kwargs["output_dimensionality"] == 1536
     assert kwargs["target_width"] == 640
     assert kwargs["enable_audio"] is False
     assert kwargs["whisper_model"] == "small"
@@ -219,5 +221,11 @@ def test_execute_search_accepts_multimodal_query() -> None:
         rerank=True,
         auditor=None,
     )
+
+
+def test_ui_exposes_official_mrl_dimensions() -> None:
+    assert ui_app.MRL_UI_OPTIONS == (3072, 1536, 768)
+    assert set(ui_app.MRL_UI_OPTIONS) == set(ui_app.SUPPORTED_MRL_DIMENSIONS)
+
 
 

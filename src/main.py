@@ -13,6 +13,7 @@ from src.config import (
     AUDIT_DIR,
     DB_PATH,
     RAW_DIR,
+    SUPPORTED_MRL_DIMENSIONS,
     VECTOR_SIZE,
     WHISPER_MODEL,
 )
@@ -137,6 +138,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Ancho máximo de los fotogramas en píxeles (default: 512)",
     )
     parser.add_argument(
+        "--output-dimensionality",
+        type=int,
+        choices=SUPPORTED_MRL_DIMENSIONS,
+        default=VECTOR_SIZE,
+        help=(
+            "Dimensión Matryoshka del embedding "
+            f"({', '.join(map(str, SUPPORTED_MRL_DIMENSIONS))}; default: {VECTOR_SIZE})"
+        ),
+    )
+    parser.add_argument(
         "--rerank",
         action=argparse.BooleanOptionalAction,
         default=True,
@@ -189,7 +200,7 @@ def build_run_config(args: argparse.Namespace) -> dict[str, Any]:
         cli_args=vars(args),
         raw_dir=RAW_DIR,
         db_path=DB_PATH,
-        vector_size=VECTOR_SIZE,
+        vector_size=getattr(args, "output_dimensionality", VECTOR_SIZE),
     )
 
 
@@ -242,7 +253,7 @@ def main(argv: list[str] | None = None) -> int:
             service = VideoRAGService(
                 db_path=DB_PATH,
                 raw_dir=RAW_DIR,
-                vector_size=VECTOR_SIZE,
+                vector_size=args.output_dimensionality,
             )
             if args.index:
                 asyncio.run(
@@ -253,6 +264,7 @@ def main(argv: list[str] | None = None) -> int:
                         min_shot_frames=args.min_shot_frames,
                         entropy_stride=args.entropy_stride,
                         jpeg_quality=args.jpeg_quality,
+                        output_dimensionality=args.output_dimensionality,
                         target_width=args.target_width,
                         enable_audio=not args.no_audio,
                         whisper_model=args.whisper_model,

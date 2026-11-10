@@ -287,7 +287,7 @@ El Cuadro~\ref{tab:parametros_gemini_vectorizer} sintetiza los parámetros defin
 \textbf{Parámetro} & \textbf{Módulo} & \textbf{Valor} & \textbf{Justificación Técnica / MLOps} \\
 \midrule
 \texttt{model} & \texttt{gemini\_vectorizer.py} & \texttt{gemini-embedding-2} & Modelo omnimodal nativo (espacio compartido) \\
-\texttt{output\_dimensionality} & \texttt{gemini\_vectorizer.py} & $3.072$ (o $768$ + $L_2$) & Máxima resolución semántica (\texttt{VECTOR\_SIZE}) \\
+\texttt{output\_dimensionality} & \texttt{gemini\_vectorizer.py} & $3.072$, $1.536$ o $768$ & MRL con normalización $L_2$ (\texttt{truncate\_and\_normalize\_mrl}) \\
 \texttt{jpeg\_quality} & \texttt{gemini\_vectorizer.py} & $90$ (escala $1\text{-}100$) & Alta fidelidad visual en RAM sin artefactos \\
 \texttt{max\_concurrent\_requests} & \texttt{pipeline.py} & $3$ (reducido de $5$) & Limita peticiones concurrentes en semáforo \\
 \texttt{retry\_base\_delay} & \texttt{gemini\_vectorizer.py} & $4,0\text{ s}$ (antes $2,0\text{ s}$) & Base geométrica para cubrir ventana TPM \\

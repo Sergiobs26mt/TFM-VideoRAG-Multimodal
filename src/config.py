@@ -15,6 +15,7 @@ AUDIT_DIR: Path = PROJECT_ROOT / "audit"
 
 COLLECTION_NAME: str = "video_chunks"
 VECTOR_SIZE: int = 3072
+SUPPORTED_MRL_DIMENSIONS: tuple[int, ...] = (768, 1536, 3072)
 MAX_CHUNKS_PER_VIDEO: int = 800
 EMBEDDING_MODEL: str = "gemini-embedding-2-preview"
 RERANKER_MODEL: str = "gemini-3.5-flash-lite"
@@ -58,7 +59,7 @@ class VectorizerConfig:
 
     def __post_init__(self) -> None:
         if (
-            self.output_dimensionality < 1
+            not 128 <= self.output_dimensionality <= 3072
             or self.max_retries < 0
             or self.retry_base_delay < 0.0
             or not 1 <= self.jpeg_quality <= 100

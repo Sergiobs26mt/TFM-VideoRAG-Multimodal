@@ -5,12 +5,15 @@ from __future__ import annotations
 import csv
 import json
 import time
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from src.models import RerankedResult, SearchResult
-from src.rag_engine.service import VideoRAGService
+from src.config import VECTOR_SIZE
+from src.embeddings.gemini_vectorizer import truncate_and_normalize_mrl
+from src.models import RerankedResult, SearchResult, VectorizedChunk
+from src.rag_engine.service import VideoRAGService, _deduplicate_temporal_candidates
+from src.rag_engine.vector_db import QdrantSearchEngine
 from src.utils.audit import RunAuditor
 
 
@@ -47,6 +50,7 @@ class BenchmarkSummary:
     mrr: float
     mean_latency_seconds: float
     evaluations: list[QueryEvaluation]
+    recall_at_3: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -83,6 +87,56 @@ class NegativeQueryEvaluation:
     false_positives: int
     correctly_rejected: bool
     latency_seconds: float
+
+
+@dataclass(frozen=True)
+class MatryoshkaDimensionMetrics:
+    """Métricas de recuperación, memoria y latencia para una dimensión Matryoshka."""
+
+    video_name: str
+    dimension: int
+    num_chunks: int
+    total_queries: int
+    recall_at_1: float
+    recall_at_3: float
+    recall_at_5: float
+    mrr: float
+    bytes_per_vector: int
+    kb_per_vector: float
+    total_vectors_kb: float
+    storage_savings_pct: float
+    mean_search_ms: float
+    evaluations: list[QueryEvaluation]
+
+
+@dataclass(frozen=True)
+class MatryoshkaMultiTargetMetrics:
+    """Métricas multi-objetivo (Etapa 1 y Etapa 2) para una dimensión Matryoshka."""
+
+    video_name: str
+    dimension: int
+    total_queries: int
+    mean_interval_recall_stage1: float
+    mean_precision_stage1: float
+    mean_interval_recall_stage2: float
+    mean_precision_stage2: float
+    stage1_evaluations: list[MultiTargetEvaluation]
+    stage2_evaluations: list[MultiTargetEvaluation]
+
+
+@dataclass(frozen=True)
+class MatryoshkaNegativeMetrics:
+    """Métricas de rechazo de falsos positivos en consultas negativas por dimensión Matryoshka."""
+
+    video_name: str
+    dimension: int
+    total_queries: int
+    total_candidates_stage1: int
+    false_positives_stage1: int
+    false_positives_stage2: int
+    rejection_rate_stage2: float
+    stage1_evaluations: list[NegativeQueryEvaluation]
+    stage2_evaluations: list[NegativeQueryEvaluation]
 
 
 def intervals_overlap(
@@ -216,6 +270,9 @@ def compute_benchmark_summary(
         )
 
     hits_at_1 = sum(1 for e in evaluations if e.hit_rank == 1)
+    hits_at_3 = sum(
+        1 for e in evaluations if e.hit_rank is not None and e.hit_rank <= 3
+    )
     hits_at_k = sum(
         1 for e in evaluations if e.hit_rank is not None and e.hit_rank <= top_k
     )
@@ -227,6 +284,7 @@ def compute_benchmark_summary(
         top_k=top_k,
         rerank=rerank,
         recall_at_1=hits_at_1 / total,
+        recall_at_3=hits_at_3 / total,
         recall_at_k=hits_at_k / total,
         mrr=mrr,
         mean_latency_seconds=mean_latency,
@@ -353,4 +411,348 @@ async def run_negative_benchmark(
         elapsed = time.perf_counter() - t0
         evaluations.append(evaluate_negative_results(query, results, elapsed))
     return evaluations
+
+
+def evaluate_matryoshka_dimensions(
+    video_name: str,
+    chunks_3072: Sequence[VectorizedChunk],
+    dataset: Sequence[GroundTruthQuery],
+    query_vectors_3072: Mapping[str, Sequence[float]],
+    dimensions: Sequence[int] = (3072, 1536, 768),
+    top_k: int = 5,
+) -> list[MatryoshkaDimensionMetrics]:
+    """Evalúa en Qdrant las dimensiones Matryoshka truncando y normalizando en L2 los vectores 3072-d."""
+    results_by_dim: list[MatryoshkaDimensionMetrics] = []
+    raw_fetch_k = max(top_k * 3, 25)
+
+    for dim in dimensions:
+        truncated_chunks = [
+            VectorizedChunk(
+                index=c.index,
+                start_time=c.start_time,
+                end_time=c.end_time,
+                embedding=truncate_and_normalize_mrl(c.embedding, dim),
+                transcript=c.transcript,
+            )
+            for c in chunks_3072
+        ]
+        engine = QdrantSearchEngine(path=None)
+        engine.create_collection(vector_size=dim, recreate=True)
+        engine.insert_chunks(truncated_chunks, video_name=video_name)
+
+        evaluations: list[QueryEvaluation] = []
+        for item in dataset:
+            q_vec = truncate_and_normalize_mrl(query_vectors_3072[item.query], dim)
+            t0 = time.perf_counter()
+            raw_candidates = engine.search_event(
+                q_vec, limit=raw_fetch_k, video_name=video_name
+            )
+            deduped = _deduplicate_temporal_candidates(raw_candidates)[:top_k]
+            elapsed = time.perf_counter() - t0
+            evaluations.append(evaluate_search_results(item, deduped, elapsed))
+
+        summary = compute_benchmark_summary(evaluations, top_k=top_k, rerank=False)
+        bytes_per_vec = dim * 4
+        kb_per_vec = bytes_per_vec / 1024.0
+        total_kb = (len(truncated_chunks) * bytes_per_vec) / 1024.0
+        savings_pct = (1.0 - (dim / float(VECTOR_SIZE))) * 100.0
+
+        results_by_dim.append(
+            MatryoshkaDimensionMetrics(
+                video_name=video_name,
+                dimension=dim,
+                num_chunks=len(truncated_chunks),
+                total_queries=summary.total_queries,
+                recall_at_1=summary.recall_at_1,
+                recall_at_3=summary.recall_at_3,
+                recall_at_5=summary.recall_at_k,
+                mrr=summary.mrr,
+                bytes_per_vector=bytes_per_vec,
+                kb_per_vector=kb_per_vec,
+                total_vectors_kb=total_kb,
+                storage_savings_pct=savings_pct,
+                mean_search_ms=summary.mean_latency_seconds * 1000.0,
+                evaluations=summary.evaluations,
+            )
+        )
+    return results_by_dim
+
+
+def write_matryoshka_ablation_csv(
+    path: str | Path,
+    metrics: Sequence[MatryoshkaDimensionMetrics],
+) -> None:
+    """Exporta a CSV los resultados agregados de ablación Matryoshka por vídeo y dimensión."""
+    file_path = Path(path)
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    with file_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(
+            [
+                "video_name",
+                "dimension",
+                "num_chunks",
+                "total_queries",
+                "recall_at_1",
+                "recall_at_3",
+                "recall_at_5",
+                "mrr",
+                "bytes_per_vector",
+                "kb_per_vector",
+                "total_vectors_kb",
+                "storage_savings_pct",
+                "mean_search_ms",
+            ]
+        )
+        for m in metrics:
+            writer.writerow(
+                [
+                    m.video_name,
+                    m.dimension,
+                    m.num_chunks,
+                    m.total_queries,
+                    f"{m.recall_at_1:.4f}",
+                    f"{m.recall_at_3:.4f}",
+                    f"{m.recall_at_5:.4f}",
+                    f"{m.mrr:.4f}",
+                    m.bytes_per_vector,
+                    f"{m.kb_per_vector:.2f}",
+                    f"{m.total_vectors_kb:.2f}",
+                    f"{m.storage_savings_pct:.1f}",
+                    f"{m.mean_search_ms:.4f}",
+                ]
+            )
+
+
+async def evaluate_matryoshka_multi_target(
+    video_name: str,
+    chunks_3072: Sequence[VectorizedChunk],
+    queries: Sequence[MultiTargetQuery],
+    query_vectors_3072: Mapping[str, Sequence[float]],
+    rerank_fn: Callable[[str, list[SearchResult]], Awaitable[list[RerankedResult]]],
+    dimensions: Sequence[int] = (3072, 1536, 768),
+    top_k: int = 10,
+) -> list[MatryoshkaMultiTargetMetrics]:
+    """Evalúa consultas multi-objetivo (Etapa 1 y Etapa 2) en cada dimensión Matryoshka."""
+    results_by_dim: list[MatryoshkaMultiTargetMetrics] = []
+    fetch_k = max(top_k, min(top_k * 2, 10))
+    raw_fetch_k = max(fetch_k * 3, 25)
+
+    for dim in dimensions:
+        truncated_chunks = [
+            VectorizedChunk(
+                index=c.index,
+                start_time=c.start_time,
+                end_time=c.end_time,
+                embedding=truncate_and_normalize_mrl(c.embedding, dim),
+                transcript=c.transcript,
+            )
+            for c in chunks_3072
+        ]
+        engine = QdrantSearchEngine(path=None)
+        engine.create_collection(vector_size=dim, recreate=True)
+        engine.insert_chunks(truncated_chunks, video_name=video_name)
+
+        stage1_evals: list[MultiTargetEvaluation] = []
+        stage2_evals: list[MultiTargetEvaluation] = []
+
+        for item in queries:
+            q_vec = truncate_and_normalize_mrl(query_vectors_3072[item.query], dim)
+            t0 = time.perf_counter()
+            raw_candidates = engine.search_event(
+                q_vec, limit=raw_fetch_k, video_name=video_name
+            )
+            candidates = _deduplicate_temporal_candidates(raw_candidates)[:fetch_k]
+            elapsed1 = time.perf_counter() - t0
+            stage1_evals.append(
+                evaluate_multi_target_results(item, candidates[:top_k], elapsed1)
+            )
+
+            t1 = time.perf_counter()
+            reranked = await rerank_fn(item.query, candidates)
+            elapsed2 = time.perf_counter() - t1
+            stage2_evals.append(
+                evaluate_multi_target_results(
+                    item, reranked[:top_k], elapsed1 + elapsed2
+                )
+            )
+
+        n = len(queries) or 1
+        results_by_dim.append(
+            MatryoshkaMultiTargetMetrics(
+                video_name=video_name,
+                dimension=dim,
+                total_queries=len(queries),
+                mean_interval_recall_stage1=sum(
+                    e.interval_recall for e in stage1_evals
+                )
+                / n,
+                mean_precision_stage1=sum(e.precision for e in stage1_evals) / n,
+                mean_interval_recall_stage2=sum(
+                    e.interval_recall for e in stage2_evals
+                )
+                / n,
+                mean_precision_stage2=sum(e.precision for e in stage2_evals) / n,
+                stage1_evaluations=stage1_evals,
+                stage2_evaluations=stage2_evals,
+            )
+        )
+    return results_by_dim
+
+
+async def evaluate_matryoshka_negative(
+    video_name: str,
+    chunks_3072: Sequence[VectorizedChunk],
+    queries: Sequence[str],
+    query_vectors_3072: Mapping[str, Sequence[float]],
+    rerank_fn: Callable[[str, list[SearchResult]], Awaitable[list[RerankedResult]]],
+    dimensions: Sequence[int] = (3072, 1536, 768),
+    top_k: int = 5,
+) -> list[MatryoshkaNegativeMetrics]:
+    """Evalúa consultas negativas (Etapa 1 y Etapa 2) en cada dimensión Matryoshka."""
+    results_by_dim: list[MatryoshkaNegativeMetrics] = []
+    fetch_k = max(top_k, min(top_k * 2, 10))
+    raw_fetch_k = max(fetch_k * 3, 25)
+
+    for dim in dimensions:
+        truncated_chunks = [
+            VectorizedChunk(
+                index=c.index,
+                start_time=c.start_time,
+                end_time=c.end_time,
+                embedding=truncate_and_normalize_mrl(c.embedding, dim),
+                transcript=c.transcript,
+            )
+            for c in chunks_3072
+        ]
+        engine = QdrantSearchEngine(path=None)
+        engine.create_collection(vector_size=dim, recreate=True)
+        engine.insert_chunks(truncated_chunks, video_name=video_name)
+
+        stage1_evals: list[NegativeQueryEvaluation] = []
+        stage2_evals: list[NegativeQueryEvaluation] = []
+
+        for q_text in queries:
+            q_vec = truncate_and_normalize_mrl(query_vectors_3072[q_text], dim)
+            t0 = time.perf_counter()
+            raw_candidates = engine.search_event(
+                q_vec, limit=raw_fetch_k, video_name=video_name
+            )
+            candidates = _deduplicate_temporal_candidates(raw_candidates)[:fetch_k]
+            elapsed1 = time.perf_counter() - t0
+            stage1_evals.append(
+                evaluate_negative_results(q_text, candidates[:top_k], elapsed1)
+            )
+
+            t1 = time.perf_counter()
+            reranked = await rerank_fn(q_text, candidates)
+            elapsed2 = time.perf_counter() - t1
+            stage2_evals.append(
+                evaluate_negative_results(
+                    q_text, reranked[:top_k], elapsed1 + elapsed2
+                )
+            )
+
+        n = len(queries) or 1
+        rejected_queries = sum(1 for e in stage2_evals if e.correctly_rejected)
+        results_by_dim.append(
+            MatryoshkaNegativeMetrics(
+                video_name=video_name,
+                dimension=dim,
+                total_queries=len(queries),
+                total_candidates_stage1=sum(e.total_candidates for e in stage1_evals),
+                false_positives_stage1=sum(e.false_positives for e in stage1_evals),
+                false_positives_stage2=sum(e.false_positives for e in stage2_evals),
+                rejection_rate_stage2=rejected_queries / n,
+                stage1_evaluations=stage1_evals,
+                stage2_evaluations=stage2_evals,
+            )
+        )
+    return results_by_dim
+
+
+def write_matryoshka_multi_target_csv(
+    path: str | Path,
+    metrics: Sequence[MatryoshkaMultiTargetMetrics],
+) -> None:
+    """Exporta a CSV el detalle por consulta multi-objetivo y dimensión Matryoshka."""
+    file_path = Path(path)
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    with file_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(
+            [
+                "video_name",
+                "dimension",
+                "query",
+                "expected_count",
+                "matched_stage1",
+                "interval_recall_stage1",
+                "precision_stage1",
+                "first_hit_stage1",
+                "matched_stage2",
+                "interval_recall_stage2",
+                "precision_stage2",
+                "first_hit_stage2",
+            ]
+        )
+        for m in metrics:
+            for e1, e2 in zip(
+                m.stage1_evaluations, m.stage2_evaluations, strict=True
+            ):
+                writer.writerow(
+                    [
+                        m.video_name,
+                        m.dimension,
+                        e1.query,
+                        e1.expected_count,
+                        e1.matched_intervals,
+                        f"{e1.interval_recall:.4f}",
+                        f"{e1.precision:.4f}",
+                        e1.first_hit_rank,
+                        e2.matched_intervals,
+                        f"{e2.interval_recall:.4f}",
+                        f"{e2.precision:.4f}",
+                        e2.first_hit_rank,
+                    ]
+                )
+
+
+def write_matryoshka_negative_csv(
+    path: str | Path,
+    metrics: Sequence[MatryoshkaNegativeMetrics],
+) -> None:
+    """Exporta a CSV el detalle por consulta negativa y dimensión Matryoshka."""
+    file_path = Path(path)
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    with file_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(
+            [
+                "video_name",
+                "dimension",
+                "query",
+                "total_candidates_stage1",
+                "false_positives_stage1",
+                "false_positives_stage2",
+                "correctly_rejected_stage2",
+            ]
+        )
+        for m in metrics:
+            for e1, e2 in zip(
+                m.stage1_evaluations, m.stage2_evaluations, strict=True
+            ):
+                writer.writerow(
+                    [
+                        m.video_name,
+                        m.dimension,
+                        e1.query,
+                        e1.total_candidates,
+                        e1.false_positives,
+                        e2.false_positives,
+                        e2.correctly_rejected,
+                    ]
+                )
+
+
 

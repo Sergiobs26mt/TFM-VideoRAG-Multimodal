@@ -9,6 +9,7 @@ import pytest
 
 from src.config import (
     MAX_CHUNKS_PER_VIDEO,
+    SUPPORTED_MRL_DIMENSIONS,
     VECTOR_SIZE,
     AudioConfig,
     ChunkingConfig,
@@ -101,6 +102,8 @@ def test_chunking_config_rejects_invalid_values(kwargs: dict[str, float | int]) 
     "kwargs",
     [
         {"output_dimensionality": 0},
+        {"output_dimensionality": 127},
+        {"output_dimensionality": 3073},
         {"max_retries": -1},
         {"retry_base_delay": -0.1},
         {"jpeg_quality": 0},
@@ -111,6 +114,13 @@ def test_chunking_config_rejects_invalid_values(kwargs: dict[str, float | int]) 
 def test_vectorizer_config_rejects_invalid_values(kwargs: dict[str, float | int]) -> None:
     with pytest.raises(ValueError):
         VectorizerConfig(**kwargs)  # type: ignore[arg-type]
+
+
+def test_supported_mrl_dimensions_constant() -> None:
+    assert SUPPORTED_MRL_DIMENSIONS == (768, 1536, 3072)
+    for dim in SUPPORTED_MRL_DIMENSIONS:
+        cfg = VectorizerConfig(output_dimensionality=dim)
+        assert cfg.output_dimensionality == dim
 
 
 def test_search_config_rejects_non_positive_top_k() -> None:
