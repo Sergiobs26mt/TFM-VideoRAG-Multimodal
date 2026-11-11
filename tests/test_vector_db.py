@@ -158,7 +158,7 @@ def test_insert_and_search_persists_transcript() -> None:
     assert results[1].transcript is None
 
 
-def test_create_collection_recreates_when_vector_size_changes() -> None:
+def test_create_collection_raises_when_vector_size_differs_and_keeps_data() -> None:
     engine = QdrantSearchEngine(path=None)
     assert engine.get_collection_vector_size() is None
 
@@ -166,10 +166,55 @@ def test_create_collection_recreates_when_vector_size_changes() -> None:
     assert engine.get_collection_vector_size() == 3
     engine.insert_chunks([VectorizedChunk(0, 0.0, 2.0, [1.0, 0.0, 0.0])], "v.mp4")
 
-    engine.create_collection(vector_size=2, recreate=False)
+    with pytest.raises(VectorDBError, match="dimensión"):
+        engine.create_collection(vector_size=2, recreate=False)
+    assert engine.get_collection_vector_size() == 3
+    assert engine.get_indexed_videos() == ["v.mp4"]
+
+
+def test_create_collection_recreate_true_replaces_collection() -> None:
+    engine = QdrantSearchEngine(path=None)
+    engine.create_collection(vector_size=3)
+    engine.insert_chunks([VectorizedChunk(0, 0.0, 2.0, [1.0, 0.0, 0.0])], "v.mp4")
+
+    engine.create_collection(vector_size=2, recreate=True)
     assert engine.get_collection_vector_size() == 2
     assert engine.get_indexed_videos() == []
     assert engine.insert_chunks([VectorizedChunk(0, 0.0, 2.0, [1.0, 0.0])], "v2.mp4") == 1
+
+
+def test_use_collection_isolates_data() -> None:
+    engine = QdrantSearchEngine(path=None, collection_name="a")
+    engine.create_collection(vector_size=3)
+    engine.insert_chunks(_chunks(), "v.mp4")
+    assert engine.collection_name == "a"
+
+    engine.use_collection("b")
+    assert engine.collection_name == "b"
+    assert engine.get_indexed_videos() == []
+    assert engine.get_collection_vector_size() is None
+    engine.create_collection(vector_size=2)
+    engine.insert_chunks([VectorizedChunk(0, 0.0, 1.0, [1.0, 0.0])], "w.mp4")
+    assert engine.get_indexed_videos() == ["w.mp4"]
+    assert engine.search_event([1.0, 0.0], limit=5)[0].video_name == "w.mp4"
+
+    engine.use_collection("a")
+    assert engine.get_indexed_videos() == ["v.mp4"]
+    assert engine.get_collection_vector_size() == 3
+
+
+def test_clear_database_only_clears_active_collection() -> None:
+    engine = QdrantSearchEngine(path=None, collection_name="a")
+    engine.create_collection(vector_size=3)
+    engine.insert_chunks(_chunks(), "v.mp4")
+    engine.use_collection("b")
+    engine.create_collection(vector_size=3)
+    engine.insert_chunks(_chunks(), "w.mp4")
+
+    engine.clear_database(vector_size=3)
+    assert engine.get_indexed_videos() == []
+    engine.use_collection("a")
+    assert engine.get_indexed_videos() == ["v.mp4"]
 
 
 def test_get_video_chunks_with_vectors_returns_sorted_chunks() -> None:

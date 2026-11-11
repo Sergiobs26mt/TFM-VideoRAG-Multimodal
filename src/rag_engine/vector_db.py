@@ -50,6 +50,15 @@ class QdrantSearchEngine:
         except Exception as exc:  # Qdrant local puede fallar por bloqueo de fichero, etc.
             raise VectorDBError(f"No se pudo inicializar Qdrant: {exc}") from exc
 
+    @property
+    def collection_name(self) -> str:
+        """Nombre de la colección activa."""
+        return self._collection
+
+    def use_collection(self, name: str) -> None:
+        """Cambia la colección sobre la que operan el resto de métodos."""
+        self._collection = name
+
     def get_collection_vector_size(self) -> int | None:
         """Devuelve la dimensión configurada en la colección activa o ``None`` si no existe."""
         try:
@@ -74,7 +83,8 @@ class QdrantSearchEngine:
 
         Raises:
             ValueError: Si la dimensión no es positiva.
-            VectorDBError: Si Qdrant falla al crear la colección.
+            VectorDBError: Si la colección existe con otra dimensión y ``recreate`` es
+                ``False``, o si Qdrant falla al crearla.
         """
         if vector_size < 1:
             raise ValueError("vector_size debe ser >= 1.")
@@ -89,11 +99,9 @@ class QdrantSearchEngine:
                         vector_size,
                     )
                     return
-                logger.info(
-                    "Recreando colección '%s' por cambio de dimensión (%s -> %d)",
-                    self._collection,
-                    current_size,
-                    vector_size,
+                raise VectorDBError(
+                    f"La colección '{self._collection}' tiene dimensión {current_size} "
+                    f"y se pidió {vector_size}. Usa otra colección o vacíala."
                 )
             if exists:
                 self._client.delete_collection(self._collection)

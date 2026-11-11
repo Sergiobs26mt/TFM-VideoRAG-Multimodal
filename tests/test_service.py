@@ -554,7 +554,7 @@ def test_service_set_vector_size_updates_vectorizer_and_cache_key() -> None:
 
         service.set_vector_size(1536)
         assert service.vector_size == 1536
-        engine.create_collection(vector_size=2)
+        engine.create_collection(vector_size=2, recreate=True)
         engine.insert_chunks([VectorizedChunk(0, 0.0, 2.0, [1.0, 0.0])], "v.mp4")
         asyncio.run(service.search("hola", rerank=False))
 
