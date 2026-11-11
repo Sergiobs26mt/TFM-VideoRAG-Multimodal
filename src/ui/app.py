@@ -14,8 +14,9 @@ import streamlit as st
 from src.config import (
     AUDIT_DIR,
     DB_PATH,
+    DEFAULT_EMBEDDING_BACKEND,
+    EMBEDDING_BACKENDS,
     RAW_DIR,
-    SUPPORTED_MRL_DIMENSIONS,
     VECTOR_SIZE,
     WHISPER_MODEL,
     build_run_config,
@@ -34,7 +35,7 @@ from src.utils.audit import RunAuditor
 logger = logging.getLogger(__name__)
 
 MRL_UI_OPTIONS: tuple[int, ...] = tuple(
-    sorted(SUPPORTED_MRL_DIMENSIONS, reverse=True)
+    sorted(EMBEDDING_BACKENDS[DEFAULT_EMBEDDING_BACKEND].dimensions, reverse=True)
 )
 
 

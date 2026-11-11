@@ -8,17 +8,21 @@ from pathlib import Path
 import pytest
 
 from src.config import (
+    EMBEDDING_BACKENDS,
     MAX_CHUNKS_PER_VIDEO,
-    SUPPORTED_MRL_DIMENSIONS,
     VECTOR_SIZE,
     AudioConfig,
     ChunkingConfig,
     SearchConfig,
     VectorizerConfig,
     build_run_config,
+    collection_name_for,
+    default_dimension,
+    validate_embedding_choice,
 )
 from src.models import (
     AudioTranscriptionError,
+    IndexStats,
     MultimodalQuery,
     QuotaSafetyError,
     RerankedResult,
@@ -116,11 +120,68 @@ def test_vectorizer_config_rejects_invalid_values(kwargs: dict[str, float | int]
         VectorizerConfig(**kwargs)  # type: ignore[arg-type]
 
 
-def test_supported_mrl_dimensions_constant() -> None:
-    assert SUPPORTED_MRL_DIMENSIONS == (768, 1536, 3072)
-    for dim in SUPPORTED_MRL_DIMENSIONS:
+def test_gemini_backend_dimensions_are_valid_vectorizer_dimensions() -> None:
+    assert EMBEDDING_BACKENDS["gemini"].dimensions == (3072, 1536, 768)
+    for dim in EMBEDDING_BACKENDS["gemini"].dimensions:
         cfg = VectorizerConfig(output_dimensionality=dim)
         assert cfg.output_dimensionality == dim
+
+
+def test_backend_dimensions_and_defaults() -> None:
+    assert EMBEDDING_BACKENDS["gemini"].dimensions == (3072, 1536, 768)
+    assert EMBEDDING_BACKENDS["qwen3-vl-2b"].dimensions == (2048, 1536, 768)
+    assert EMBEDDING_BACKENDS["gemma2"].dimensions == (768, 512, 256)
+    assert [default_dimension(b) for b in ("gemini", "qwen3-vl-2b", "gemma2")] == [
+        3072,
+        2048,
+        768,
+    ]
+    assert [EMBEDDING_BACKENDS[b].is_local for b in ("gemini", "qwen3-vl-2b", "gemma2")] == [
+        False,
+        True,
+        True,
+    ]
+    assert EMBEDDING_BACKENDS["qwen3-vl-2b"].model_id == "Qwen/Qwen3-VL-Embedding-2B"
+    assert EMBEDDING_BACKENDS["gemma2"].model_id == "google/embeddinggemma-2"
+
+
+def test_collection_name_for_keeps_legacy_name_for_gemini_3072() -> None:
+    assert collection_name_for("gemini", 3072) == "video_chunks"
+
+
+def test_collection_name_for_uses_suffix() -> None:
+    assert collection_name_for("gemini", 1536) == "video_chunks__gemini__1536"
+    assert collection_name_for("qwen3-vl-2b", 2048) == "video_chunks__qwen3-vl-2b__2048"
+    assert collection_name_for("gemma2", 768) == "video_chunks__gemma2__768"
+
+
+@pytest.mark.parametrize(
+    ("backend", "dim"),
+    [("gemma2", 3072), ("gemma2", 1536), ("qwen3-vl-2b", 512), ("gemini", 2048), ("otro", 768)],
+)
+def test_validate_embedding_choice_rejects_foreign_dimension_or_backend(
+    backend: str, dim: int
+) -> None:
+    with pytest.raises(ValueError):
+        validate_embedding_choice(backend, dim)
+    with pytest.raises(ValueError):
+        collection_name_for(backend, dim)
+
+
+def test_build_run_config_records_embedding_fields() -> None:
+    stats = IndexStats("gemma2", "Local MPS", 768, 12.5, 40)
+    cfg = build_run_config(vector_size=768, embedding_backend="gemma2", index_stats=stats)
+    assert cfg["embedding_backend"] == "gemma2"
+    assert cfg["embedding_dimension"] == 768
+    assert cfg["device"] == "Local MPS"
+    assert cfg["index_seconds"] == 12.5
+
+
+def test_build_run_config_without_index_stats_has_empty_device_and_seconds() -> None:
+    cfg = build_run_config()
+    assert cfg["embedding_backend"] == "gemini"
+    assert cfg["device"] is None
+    assert cfg["index_seconds"] is None
 
 
 def test_search_config_rejects_non_positive_top_k() -> None:

@@ -7,6 +7,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from src.models import IndexStats
+
 PROJECT_ROOT: Path = Path(__file__).resolve().parent.parent
 RAW_DIR: Path = Path("data/raw")
 PROCESSED_DIR: Path = Path("data/processed")
@@ -15,12 +17,61 @@ AUDIT_DIR: Path = PROJECT_ROOT / "audit"
 
 COLLECTION_NAME: str = "video_chunks"
 VECTOR_SIZE: int = 3072
-SUPPORTED_MRL_DIMENSIONS: tuple[int, ...] = (768, 1536, 3072)
 MAX_CHUNKS_PER_VIDEO: int = 800
 EMBEDDING_MODEL: str = "gemini-embedding-2-preview"
 RERANKER_MODEL: str = "gemini-3.5-flash-lite"
 WHISPER_MODEL: str = "base"
 AUDIO_LANGUAGE: str = "es"
+DEFAULT_EMBEDDING_BACKEND: str = "gemini"
+
+
+@dataclass(frozen=True)
+class EmbeddingBackendSpec:
+    """Motor de embeddings disponible: checkpoint, dimensiones MRL válidas y ubicación."""
+
+    name: str
+    model_id: str
+    dimensions: tuple[int, ...]
+    is_local: bool
+
+
+EMBEDDING_BACKENDS: dict[str, EmbeddingBackendSpec] = {
+    "gemini": EmbeddingBackendSpec("gemini", EMBEDDING_MODEL, (3072, 1536, 768), False),
+    "qwen3-vl-2b": EmbeddingBackendSpec(
+        "qwen3-vl-2b", "Qwen/Qwen3-VL-Embedding-2B", (2048, 1536, 768), True
+    ),
+    "gemma2": EmbeddingBackendSpec(
+        "gemma2", "google/embeddinggemma-2", (768, 512, 256), True
+    ),
+}
+
+
+def default_dimension(backend: str) -> int:
+    """Devuelve la dimensión nativa (la mayor) del backend."""
+    return EMBEDDING_BACKENDS[backend].dimensions[0]
+
+
+def validate_embedding_choice(backend: str, dim: int) -> None:
+    """Lanza ``ValueError`` si el backend no existe o no admite la dimensión."""
+    spec = EMBEDDING_BACKENDS.get(backend)
+    if spec is None:
+        raise ValueError(
+            f"Backend de embeddings desconocido: {backend!r}. "
+            f"Opciones: {', '.join(EMBEDDING_BACKENDS)}."
+        )
+    if dim not in spec.dimensions:
+        raise ValueError(
+            f"Dimensión {dim} no válida para '{backend}'. "
+            f"Opciones: {', '.join(map(str, spec.dimensions))}."
+        )
+
+
+def collection_name_for(backend: str, dim: int) -> str:
+    """Nombre de la colección Qdrant de un backend y dimensión (Gemini 3072 conserva el original)."""
+    validate_embedding_choice(backend, dim)
+    if backend == DEFAULT_EMBEDDING_BACKEND and dim == VECTOR_SIZE:
+        return COLLECTION_NAME
+    return f"{COLLECTION_NAME}__{backend}__{dim}"
 
 
 @dataclass(frozen=True)
@@ -102,6 +153,8 @@ def build_run_config(
     db_path: str = DB_PATH,
     vector_size: int = VECTOR_SIZE,
     max_chunks_per_video: int = MAX_CHUNKS_PER_VIDEO,
+    embedding_backend: str = DEFAULT_EMBEDDING_BACKEND,
+    index_stats: IndexStats | None = None,
 ) -> dict[str, Any]:
     """Construye el diccionario de configuración de sesión para auditoría."""
     payload: dict[str, Any] = {}
@@ -113,6 +166,10 @@ def build_run_config(
     payload.update(
         {
             "vector_size": vector_size,
+            "embedding_backend": embedding_backend,
+            "embedding_dimension": vector_size,
+            "device": index_stats.device_label if index_stats else None,
+            "index_seconds": index_stats.seconds if index_stats else None,
             "db_path": db_path,
             "raw_dir": str(raw_dir),
             "max_chunks_per_video": max_chunks_per_video,

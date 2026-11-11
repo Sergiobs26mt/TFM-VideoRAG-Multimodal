@@ -4,6 +4,7 @@ import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from src.config import EMBEDDING_BACKENDS
 from src.models import MultimodalQuery, SearchResult
 from src.ui import app as ui_app
 
@@ -225,7 +226,7 @@ def test_execute_search_accepts_multimodal_query() -> None:
 
 def test_ui_exposes_official_mrl_dimensions() -> None:
     assert ui_app.MRL_UI_OPTIONS == (3072, 1536, 768)
-    assert set(ui_app.MRL_UI_OPTIONS) == set(ui_app.SUPPORTED_MRL_DIMENSIONS)
+    assert set(ui_app.MRL_UI_OPTIONS) == set(EMBEDDING_BACKENDS["gemini"].dimensions)
 
 
 

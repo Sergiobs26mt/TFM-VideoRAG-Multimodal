@@ -56,6 +56,17 @@ class VectorizedChunk:
 
 
 @dataclass(frozen=True)
+class IndexStats:
+    """Resumen de una indexación: motor de embeddings, dispositivo, dimensión y tiempo."""
+
+    backend: str
+    device_label: str
+    dimension: int
+    seconds: float
+    chunks: int
+
+
+@dataclass(frozen=True)
 class SearchResult:
     """Candidato recuperado por similitud vectorial en la Etapa 1."""
 

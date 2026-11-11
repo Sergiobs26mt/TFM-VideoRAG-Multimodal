@@ -12,8 +12,9 @@ from typing import Any
 from src.config import (
     AUDIT_DIR,
     DB_PATH,
+    DEFAULT_EMBEDDING_BACKEND,
+    EMBEDDING_BACKENDS,
     RAW_DIR,
-    SUPPORTED_MRL_DIMENSIONS,
     VECTOR_SIZE,
     WHISPER_MODEL,
 )
@@ -140,11 +141,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--output-dimensionality",
         type=int,
-        choices=SUPPORTED_MRL_DIMENSIONS,
+        choices=EMBEDDING_BACKENDS[DEFAULT_EMBEDDING_BACKEND].dimensions,
         default=VECTOR_SIZE,
         help=(
             "Dimensión Matryoshka del embedding "
-            f"({', '.join(map(str, SUPPORTED_MRL_DIMENSIONS))}; default: {VECTOR_SIZE})"
+            f"({', '.join(map(str, EMBEDDING_BACKENDS[DEFAULT_EMBEDDING_BACKEND].dimensions))}; default: {VECTOR_SIZE})"
         ),
     )
     parser.add_argument(
