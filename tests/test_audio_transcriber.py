@@ -303,3 +303,9 @@ def test_transcribe_query_audios_degrades_gracefully_on_silence_or_errors(
     )
     assert result == ["bucles for"]
 
+
+def test_unload_whisper_models_empties_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(audio_transcriber, "_MODEL_CACHE", {"base": object(), "tiny": object()})
+    audio_transcriber.unload_whisper_models()
+    assert audio_transcriber._MODEL_CACHE == {}
+

@@ -7,8 +7,16 @@ import logging
 from collections.abc import Callable
 from pathlib import Path
 
-from src.config import MAX_CHUNKS_PER_VIDEO, PROCESSED_DIR, VECTOR_SIZE, WHISPER_MODEL
-from src.embeddings.gemini_vectorizer import GeminiMultimodalVectorizer
+from src.config import (
+    DEFAULT_EMBEDDING_BACKEND,
+    EMBEDDING_BACKENDS,
+    MAX_CHUNKS_PER_VIDEO,
+    PROCESSED_DIR,
+    VECTOR_SIZE,
+    WHISPER_MODEL,
+    validate_embedding_choice,
+)
+from src.embeddings.factory import create_vectorizer
 from src.models import (
     AudioTranscriptionError,
     QuotaSafetyError,
@@ -19,6 +27,7 @@ from src.models import (
 from src.processing.audio_transcriber import (
     align_transcript_with_chunks,
     transcribe_video_audio,
+    unload_whisper_models,
 )
 from src.processing.keyframe_cache import save_video_keyframes
 from src.processing.video_chunker import process_video_single_pass
@@ -40,21 +49,23 @@ async def process_video_pipeline(
     max_shot_duration: float = 8.0,
     enable_audio: bool = True,
     whisper_model: str = WHISPER_MODEL,
+    embedding_backend: str = DEFAULT_EMBEDDING_BACKEND,
 ) -> list[VectorizedChunk]:
     """Procesa un vídeo de principio a fin y devuelve sus chunks vectorizados.
 
     Pasos:
         1. (Síncrono) Segmentación y extracción de fotogramas clave en UNA SOLA pasada
            secuencial del vídeo (SSIM + entropía) -> ``VideoChunk`` y fotogramas.
-        2. (Asíncrono) Vectorización con Gemini, redimensionando fotogramas a ``target_width``
-           y limitando la concurrencia con un ``asyncio.Semaphore`` para respetar la cuota de la API.
+        2. (Asíncrono) Vectorización con el backend ``embedding_backend``, redimensionando
+           fotogramas a ``target_width`` y limitando la concurrencia con un ``asyncio.Semaphore``.
+           Los backends locales usan siempre concurrencia 1 y descargan Whisper antes de cargar el modelo.
 
     Los chunks cuya vectorización falla de forma definitiva se registran en el
     log y se omiten, de modo que un fallo puntual no descarte todo el vídeo.
 
     Args:
         video_path: Ruta al vídeo (normalmente dentro de ``data/raw``).
-        max_concurrent_requests: Máximo de peticiones simultáneas a la API.
+        max_concurrent_requests: Máximo de peticiones simultáneas a la API (1 en backends locales).
         progress_callback: Función opcional ``callback(mensaje, progreso_0_a_1)``
             para reportar el avance en tiempo real (útil en interfaces gráficas).
         threshold: Umbral SSIM para detección de planos (menor = menos cortes).
@@ -63,18 +74,22 @@ async def process_video_pipeline(
         entropy_stride: Paso de muestreo de fotogramas para cálculo de entropía.
         jpeg_quality: Calidad de compresión JPEG de las imágenes para Gemini (1-100).
         output_dimensionality: Dimensión de los vectores de embedding generados.
-        target_width: Ancho máximo de redimensionado de fotogramas previo a Gemini.
+        target_width: Ancho máximo de redimensionado de fotogramas previo a la vectorización.
+        embedding_backend: Clave del backend en ``EMBEDDING_BACKENDS``.
 
     Returns:
         Lista de ``VectorizedChunk`` ordenada por índice temporal.
 
     Raises:
-        ValueError: Si ``max_concurrent_requests`` es menor que 1.
+        ValueError: Si ``max_concurrent_requests`` es menor que 1 o el backend y la
+            dimensión no son compatibles.
         FileNotFoundError: Si el vídeo no existe.
         QuotaSafetyError: Si el vídeo genera más de ``MAX_CHUNKS_PER_VIDEO`` chunks.
     """
     if max_concurrent_requests < 1:
         raise ValueError("max_concurrent_requests debe ser >= 1.")
+    validate_embedding_choice(embedding_backend, output_dimensionality)
+    is_local = EMBEDDING_BACKENDS[embedding_backend].is_local
 
     if progress_callback:
         progress_callback("Analizando vídeo y extrayendo fotogramas (pasada única)...", 0.05)
@@ -93,8 +108,8 @@ async def process_video_pipeline(
     )
     logger.info("Se han detectado %d chunks y extraído fotogramas", len(chunks))
 
-    # Fail-safe: abortar antes de gastar ninguna petición de la API
-    if len(chunks) > MAX_CHUNKS_PER_VIDEO:
+    # Fail-safe: abortar antes de gastar ninguna petición de la API (solo backends en la nube)
+    if not is_local and len(chunks) > MAX_CHUNKS_PER_VIDEO:
         message = (
             f"El vídeo genera {len(chunks)} chunks, lo cual excede el límite de "
             f"seguridad de {MAX_CHUNKS_PER_VIDEO} para proteger la cuota diaria de "
@@ -143,15 +158,31 @@ async def process_video_pipeline(
 
     if progress_callback:
         progress_callback(
-            f"Fotogramas listos. Vectorizando {len(chunks)} chunks con Gemini...",
+            f"Fotogramas listos. Vectorizando {len(chunks)} chunks con {embedding_backend}...",
             0.40,
         )
 
+    if is_local:
+        unload_whisper_models()
+        if progress_callback:
+            progress_callback(
+                "Cargando modelo local (la primera vez descarga varios GB)...", 0.40
+            )
+        if max_concurrent_requests > 1:
+            logger.warning(
+                "Backend local '%s': se usa concurrencia 1 en lugar de %d",
+                embedding_backend,
+                max_concurrent_requests,
+            )
+        max_concurrent_requests = 1
+
     # Paso 2: vectorización asíncrona con concurrencia limitada
-    vectorizer = GeminiMultimodalVectorizer(
-        output_dimensionality=output_dimensionality,
-        jpeg_quality=jpeg_quality,
-        target_width=target_width,
+    vectorizer = await asyncio.to_thread(
+        create_vectorizer,
+        embedding_backend,
+        output_dimensionality,
+        jpeg_quality,
+        target_width,
     )
     semaphore = asyncio.Semaphore(max_concurrent_requests)
 
@@ -166,7 +197,7 @@ async def process_video_pipeline(
             if progress_callback:
                 frac = 0.40 + 0.55 * (completed_count / len(chunks))
                 progress_callback(
-                    f"Vectorizando con Gemini ({completed_count}/{len(chunks)})...",
+                    f"Vectorizando con {embedding_backend} ({completed_count}/{len(chunks)})...",
                     frac,
                 )
             return res

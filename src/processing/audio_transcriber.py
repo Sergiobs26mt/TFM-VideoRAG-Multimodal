@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gc
 import importlib
 import logging
 import os
@@ -138,6 +139,12 @@ def _load_whisper_model(model_name: str) -> Any:
 
     _MODEL_CACHE[model_name] = model
     return model
+
+
+def unload_whisper_models() -> None:
+    """Descarta los modelos Whisper en caché para liberar memoria."""
+    _MODEL_CACHE.clear()
+    gc.collect()
 
 
 def _default_transcriber(

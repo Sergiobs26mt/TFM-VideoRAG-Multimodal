@@ -62,7 +62,7 @@ class _FakeVectorizer:
 def _patch(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     _FakeVectorizer.active = _FakeVectorizer.peak = 0
     _FakeVectorizer.fail_index = None
-    monkeypatch.setattr(pipeline, "GeminiMultimodalVectorizer", _FakeVectorizer)
+    monkeypatch.setattr(pipeline, "create_vectorizer", lambda *a, **k: _FakeVectorizer())
     monkeypatch.setattr(pipeline, "PROCESSED_DIR", tmp_path / "processed")
     monkeypatch.setattr(
         pipeline, "transcribe_video_audio", lambda *_, **__: []
@@ -200,3 +200,131 @@ def test_pipeline_skips_audio_when_disabled(
     result = asyncio.run(pipeline.process_video_pipeline("x.mp4", enable_audio=False))
     assert len(result) == 1
     assert called["audio"] is False
+
+
+def _patch_two_fake_chunks(monkeypatch: pytest.MonkeyPatch, count: int = 2) -> None:
+    fake_chunks = [VideoChunk(i, i, i, float(i), float(i + 1)) for i in range(count)]
+    fake_frames = {c.index: [np.zeros((2, 2, 3), np.uint8)] * 3 for c in fake_chunks}
+    monkeypatch.setattr(
+        pipeline, "process_video_single_pass", lambda *_: (fake_chunks, fake_frames)
+    )
+
+
+def test_pipeline_forces_single_concurrency_for_local_backend(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    video = tmp_path / "v.mp4"
+    _make_video(video, [20, 20, 20, 20])
+    with caplog.at_level("WARNING"):
+        result = asyncio.run(
+            pipeline.process_video_pipeline(
+                str(video),
+                max_concurrent_requests=3,
+                embedding_backend="qwen3-vl-2b",
+                output_dimensionality=768,
+            )
+        )
+    assert len(result) == 4
+    assert _FakeVectorizer.peak == 1
+    assert "concurrencia 1" in caplog.text
+
+
+def test_pipeline_unloads_whisper_for_local_backend_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_two_fake_chunks(monkeypatch)
+    events: list[str] = []
+
+    def fake_create(*_: Any, **__: Any) -> _FakeVectorizer:
+        events.append("create")
+        return _FakeVectorizer()
+
+    monkeypatch.setattr(pipeline, "unload_whisper_models", lambda: events.append("unload"))
+    monkeypatch.setattr(pipeline, "create_vectorizer", fake_create)
+
+    asyncio.run(
+        pipeline.process_video_pipeline(
+            "x.mp4", embedding_backend="gemma2", output_dimensionality=768
+        )
+    )
+    assert events == ["unload", "create"]
+
+    events.clear()
+    asyncio.run(pipeline.process_video_pipeline("x.mp4", embedding_backend="gemini"))
+    assert events == ["create"]
+
+
+def test_pipeline_skips_chunk_limit_for_local_backend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_two_fake_chunks(monkeypatch, count=3)
+    monkeypatch.setattr(pipeline, "MAX_CHUNKS_PER_VIDEO", 2)
+
+    with pytest.raises(QuotaSafetyError):
+        asyncio.run(pipeline.process_video_pipeline("x.mp4", embedding_backend="gemini"))
+    result = asyncio.run(
+        pipeline.process_video_pipeline(
+            "x.mp4", embedding_backend="gemma2", output_dimensionality=768
+        )
+    )
+    assert len(result) == 3
+
+
+def test_pipeline_reports_local_model_loading_progress(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_two_fake_chunks(monkeypatch)
+    local: list[str] = []
+    cloud: list[str] = []
+
+    asyncio.run(
+        pipeline.process_video_pipeline(
+            "x.mp4",
+            embedding_backend="gemma2",
+            output_dimensionality=768,
+            progress_callback=lambda msg, _: local.append(msg),
+        )
+    )
+    asyncio.run(
+        pipeline.process_video_pipeline(
+            "x.mp4",
+            embedding_backend="gemini",
+            progress_callback=lambda msg, _: cloud.append(msg),
+        )
+    )
+    assert any("Cargando modelo local" in m for m in local)
+    assert any("gemma2" in m for m in local)
+    assert not any("Cargando modelo local" in m for m in cloud)
+    assert not any("Gemini" in m for m in local)
+
+
+def test_pipeline_passes_backend_and_dimension_to_factory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_two_fake_chunks(monkeypatch)
+    calls: list[tuple[Any, ...]] = []
+
+    def fake_create(*args: Any) -> _FakeVectorizer:
+        calls.append(args)
+        return _FakeVectorizer()
+
+    monkeypatch.setattr(pipeline, "create_vectorizer", fake_create)
+    asyncio.run(
+        pipeline.process_video_pipeline(
+            "x.mp4",
+            embedding_backend="gemma2",
+            output_dimensionality=768,
+            jpeg_quality=70,
+            target_width=640,
+        )
+    )
+    assert calls == [("gemma2", 768, 70, 640)]
+
+
+def test_pipeline_rejects_invalid_backend_dimension_before_processing() -> None:
+    with pytest.raises(ValueError):
+        asyncio.run(
+            pipeline.process_video_pipeline(
+                "no_existe.mp4", embedding_backend="gemma2", output_dimensionality=3072
+            )
+        )
