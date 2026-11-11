@@ -10,7 +10,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from src.config import VECTOR_SIZE
-from src.embeddings.gemini_vectorizer import truncate_and_normalize_mrl
+from src.embeddings.mrl import truncate_and_normalize_mrl
 from src.models import RerankedResult, SearchResult, VectorizedChunk
 from src.rag_engine.service import VideoRAGService, _deduplicate_temporal_candidates
 from src.rag_engine.vector_db import QdrantSearchEngine

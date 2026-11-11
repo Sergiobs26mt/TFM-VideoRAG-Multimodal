@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
 from typing import cast
 
 import cv2
@@ -11,42 +10,21 @@ import numpy as np
 from google.genai import types
 from numpy.typing import NDArray
 
-from src.config import (
-    EMBEDDING_MODEL,
-    SUPPORTED_MRL_DIMENSIONS,
-    VECTOR_SIZE,
-    VectorizerConfig,
-)
+from src.config import EMBEDDING_MODEL, VECTOR_SIZE, VectorizerConfig
+from src.embeddings.mrl import truncate_and_normalize_mrl
 from src.models import MultimodalQuery, VectorizationError, VectorizedChunk, VideoChunk
 from src.processing.video_chunker import encode_frame_jpeg
 from src.utils.gemini_client import call_with_retry, create_gemini_client
 
 logger = logging.getLogger(__name__)
-__all__ = [
-    "SUPPORTED_MRL_DIMENSIONS",
-    "GeminiMultimodalVectorizer",
-    "truncate_and_normalize_mrl",
-]
-
-
-def truncate_and_normalize_mrl(
-    vector: Sequence[float],
-    target_dim: int,
-) -> list[float]:
-    """Recorta un vector a ``target_dim`` dimensiones Matryoshka y lo normaliza en norma L2."""
-    if target_dim < 1 or target_dim > len(vector):
-        raise ValueError(
-            f"target_dim debe estar en [1, {len(vector)}], recibido: {target_dim}."
-        )
-    sliced = [float(v) for v in vector[:target_dim]]
-    norm = float(np.linalg.norm(sliced))
-    if norm > 0.0:
-        return [v / norm for v in sliced]
-    return sliced
+__all__ = ["GeminiMultimodalVectorizer"]
 
 
 class GeminiMultimodalVectorizer:
     """Genera un embedding único por chunk a partir de sus fotogramas clave."""
+
+    backend = "gemini"
+    device_label = "Cloud API"
 
     def __init__(
         self,
