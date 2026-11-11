@@ -1,6 +1,10 @@
 # --- Integración con Google Gemini (Embeddings Multimodales) ---
 google-genai>=0.3.0
 
+# --- Embeddings locales (Qwen3-VL y EmbeddingGemma 2) ---
+sentence-transformers[image]>=6.3.0
+transformers>=5.22.2
+
 # --- Gestión de Entorno y Variables ---
 python-dotenv>=1.0.1
 jupyterlab>=4.0.0
