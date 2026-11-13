@@ -21,7 +21,7 @@ Diseñar, implementar y validar empíricamente un sistema avanzado de recuperaci
 
 ## 1. ¿Cómo funciona?
 
-El sistema segmenta cada vídeo en **planos visuales (`VideoChunk`)**, extrae y transcribe la **pista completa de audio** con Whisper, alinea temporalmente las locuciones con cada plano y fusiona **imagen + voz transcrita en un único embedding multimodal de 3072 dimensiones** almacenado en Qdrant. En tiempo de consulta, acepta cualquier combinación de **texto libre, archivos `.txt`, imágenes de referencia y pistas de audio** (`MultimodalQuery`), empaquetándolos en una sola llamada de vectorización (Etapa 1) seguida de verificación y reordenación bimodal (visual + auditiva) con Gemini 3.5 Flash Lite (Etapa 2).
+El sistema segmenta cada vídeo en **planos visuales (`VideoChunk`)**, extrae y transcribe la **pista completa de audio** con Whisper, alinea temporalmente las locuciones con cada plano y fusiona **imagen + voz transcrita en un único embedding multimodal** almacenado en Qdrant. Soporta tres motores intercambiables (`gemini`, `qwen3-vl-2b` y `gemma2`) con recorte Matryoshka (MRL) y normalización $L_2$. En tiempo de consulta, acepta cualquier combinación de **texto libre, archivos `.txt`, imágenes de referencia y pistas de audio** (`MultimodalQuery`), empaquetándolos en una sola vectorización (Etapa 1) seguida de verificación y reordenación bimodal (visual + auditiva) con Gemini 3.5 Flash Lite (Etapa 2).
 
 ### Flujo de indexación
 
@@ -31,8 +31,8 @@ flowchart LR
     A --> W["transcribe_video_audio<br/>(ffmpeg 16kHz + Whisper ASR)"]
     B --> C["align_transcript_with_chunks<br/>(alineación forzada, min_overlap=0.2s)"]
     W --> C
-    C --> D["GeminiMultimodalVectorizer<br/>(3 JPEG 512px + Part.from_text)"]
-    D --> E["VectorizedChunk (3072 dim)"]
+    C --> D["MultimodalVectorizer<br/>(Gemini / Qwen3-VL / EmbeddingGemma 2)"]
+    D --> E["VectorizedChunk (MRL L2)"]
     E --> F[("Qdrant local<br/>data/vector_db")]
 ```
 
@@ -40,8 +40,8 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    Q["MultimodalQuery<br/>(Texto + .txt + Imágenes + Audio ASR)"] --> V["embed_query / build_query_payload<br/>(gemini-embedding-2-preview, 1 llamada)"]
-    V --> S["Etapa 1: QdrantSearchEngine.search_event<br/>(coseno + deduplicación temporal)"]
+    Q["MultimodalQuery<br/>(Texto + .txt + Imágenes + Audio ASR)"] --> V["embed_query<br/>(backend activo: gemini / qwen3-vl-2b / gemma2)"]
+    V --> S["Etapa 1: QdrantSearchEngine.search_event<br/>(coseno en colección del backend + deduplicación)"]
     G[("Qdrant local")] --> S
     S --> M["Etapa 2: MultimodalReranker<br/>(Gemini 3.5 Flash Lite: imágenes ref. + collage + transcripción)"]
     M --> R["Resultados validados: intervalo, score, análisis y transcripción"]
@@ -51,11 +51,11 @@ flowchart LR
 
 | Aspecto | Etapa 1: Búsqueda Vectorial (Qdrant) | Etapa 2: Reordenación Multimodal (`rerank=True`) |
 |---|---|---|
-| **Modelo** | `gemini-embedding-2-preview` | `gemini-3.5-flash-lite` |
-| **Tipo de fusión** | **Fusión Temprana (*Early Fusion*)** en un único vector de 3072 dimensiones (normalizado con norma $L_2$) | **Evaluación Bimodal Explícita** en un único prompt generativo por lotes |
-| **Entrada de vídeo** | 3 fotogramas clave JPEG (`inicio`, `mitad de máxima entropía`, `final`) enviados como `Part.from_bytes` | Collage vertical JPEG (`_build_vertical_collage`) que apila los 3 fotogramas distintos en una sola imagen de 384 px de ancho |
-| **Entrada de audio** | Texto transcrito por Whisper y alineado al plano (`Part.from_text("Transcripción de audio del fragmento: ...")`) | Texto transcrito recuperado del payload de Qdrant e inyectado junto al collage (`Transcripción hablada en este segmento: "..."`) |
-| **Papel en la búsqueda** | Recupera los `top_k * 2` candidatos más cercanos por similitud coseno tanto si la consulta coincide con la imagen como con la voz | Inspecciona conjuntamente imagen y locución, **descarta falsos positivos (`is_relevant=false`)** y reordena los `top_k` mejores por `relevance_score` (`0.0 - 1.0`) |
+| **Modelo** | `gemini-embedding-2-preview` (`gemini`), `Qwen/Qwen3-VL-Embedding-2B` (`qwen3-vl-2b`) o `google/embeddinggemma-2` (`gemma2`) | `gemini-3.5-flash-lite` |
+| **Tipo de fusión** | **Fusión Temprana (*Early Fusion*)** en un único vector MRL normalizado en norma $L_2$ | **Evaluación Bimodal Explícita** en un único prompt generativo por lotes |
+| **Entrada de vídeo** | 3 fotogramas clave (`inicio`, `mitad de máxima entropía`, `final`) redimensionados a `target_width` (por defecto 512 px) | Collage vertical JPEG (`_build_vertical_collage`) que apila los 3 fotogramas distintos en una sola imagen de 384 px de ancho |
+| **Entrada de audio** | Texto transcrito por Whisper y alineado al plano | Texto transcrito recuperado del payload de Qdrant e inyectado junto al collage (`Transcripción hablada en este segmento: "..."`) |
+| **Papel en la búsqueda** | Recupera los `top_k * 2` candidatos más cercanos por similitud coseno dentro de la colección del `(backend, dimensión)` activo | Inspecciona conjuntamente imagen y locución, **descarta falsos positivos (`is_relevant=false`)** y reordena los `top_k` mejores por `relevance_score` (`0.0 - 1.0`) |
 
 ## 2. Tecnologías utilizadas
 
@@ -64,7 +64,7 @@ flowchart LR
 | Lenguaje | Python 3.13 |
 | Procesamiento de vídeo | `opencv-python-headless` (lectura en pasada única, SSIM, entropía de Shannon), `numpy` |
 | Procesamiento de audio (ASR) | `openai-whisper` (transcripción con marcas temporales) y `ffmpeg` (`imageio-ffmpeg`) |
-| Embeddings multimodales | Google Gemini Embedding 2 (`gemini-embedding-2-preview`) vía SDK `google-genai` |
+| Embeddings multimodales | Google Gemini Embedding 2 (`google-genai`), `Qwen/Qwen3-VL-Embedding-2B` y `google/embeddinggemma-2` (`sentence-transformers`, `transformers`, `torch` en `bfloat16`/`MPS` o `float32`/`CPU`) |
 | Verificación bimodal (Etapa 2) | Google Gemini 3.5 Flash Lite (`gemini-3.5-flash-lite`) |
 | Base de datos vectorial | Qdrant (`qdrant-client`, modo local embebido) |
 | Interfaz de usuario | Streamlit (`app.py`, `src/ui/app.py`) |
@@ -94,7 +94,11 @@ flowchart LR
 │   │   ├── keyframe_cache.py    # Caché persistente de fotogramas JPEG en data/processed/
 │   │   └── pipeline.py          # Orquestación asíncrona vídeo + audio -> VectorizedChunk
 │   ├── embeddings/
-│   │   └── gemini_vectorizer.py # Cliente asíncrono de Gemini Embedding 2 (imagen + texto)
+│   │   ├── base.py              # Protocol MultimodalVectorizer común a cloud y local
+│   │   ├── mrl.py               # truncate_and_normalize_mrl (recorte Matryoshka + norma L2)
+│   │   ├── gemini_vectorizer.py # Cliente asíncrono de Gemini Embedding 2 (imagen + texto)
+│   │   ├── local_vectorizer.py  # Vectorizador local con perfiles Qwen3-VL y EmbeddingGemma 2
+│   │   └── factory.py           # Factoría y gestión de un único modelo local en memoria
 │   ├── rag_engine/
 │   │   ├── service.py       # VideoRAGService (fachada unificada y deduplicación temporal)
 │   │   ├── evaluation.py    # Evaluador automatizado (Recall@1, Recall@K, MRR, multi-target y negativas)
@@ -105,7 +109,7 @@ flowchart LR
 │   └── utils/
 │       ├── audit.py         # RunAuditor (logs, config y resultados por run)
 │       └── gemini_client.py # Cliente compartido y transporte asíncrono con reintentos
-├── tests/                   # Pruebas unitarias (147 tests) y E2E con la API real en tests/e2e/
+├── tests/                   # Pruebas unitarias (231 tests) y E2E en tests/e2e/
 ├── requirements.txt
 └── AGENTS.md                # Reglas de estilo y desarrollo del repositorio
 ```
@@ -125,23 +129,30 @@ flowchart LR
 - **`transcribe_query_audios(audio_inputs, model_name="base", language="es")`**: convierte pistas de audio de consulta (archivos `.wav`, `.mp3`, `.m4a`, `.ogg` o `bytes` grabados desde el micrófono) a WAV 16 kHz mono temporal con `ffmpeg`, las transcribe con la caché de Whisper y aplica degradación elegante limpiando siempre los archivos temporales.
 - **`align_transcript_with_chunks(chunks, segments, min_overlap=0.2)`**: cruza los segmentos transcritos con los intervalos `[start_time, end_time]` de cada `VideoChunk`. Asigna un segmento si la intersección temporal es `>= min_overlap` o si el segmento está completamente contenido en el plano. Cuando una frase hablada cruza el corte entre dos planos superando `min_overlap` en ambos, se asigna a ambos como solapamiento semántico fronterizo.
 
-### 4.3 Vectorización multimodal fusionada: `src/embeddings/gemini_vectorizer.py`
-- **`GeminiMultimodalVectorizer.build_payload(key_frames, transcript=None)`**: codifica los 3 fotogramas clave a JPEG (`image/jpeg`) y, si el plano dispone de `transcript`, añade un `types.Part.from_text` (`"Transcripción de audio del fragmento: ..."`). Todo viaja en **un único `types.Content`**, generando un solo vector multimodal de 3072 dimensiones y consumiendo **1 petición por chunk**.
-- **`vectorize_chunk(chunk, key_frames)`**: devuelve `VectorizedChunk(index, start_time, end_time, embedding, transcript)`.
-- **`build_query_payload(query)` y `embed_query(query)`**: empaquetan todas las modalidades de un `MultimodalQuery` (imágenes de referencia redimensionadas y codificadas a JPEG + `composed_text` que une texto libre, archivos `.txt` y transcripciones de audio de consulta) en un único `types.Content` para obtener 1 vector de 3072 dimensiones en una sola llamada a `gemini-embedding-2-preview`. `embed_text(text)` delega en `embed_query` por retrocompatibilidad.
+### 4.3 Backends de embeddings y MRL: `src/embeddings/`
+Todos los motores implementan el protocolo `MultimodalVectorizer` (`base.py`) y normalizan su salida truncada con `truncate_and_normalize_mrl` (`mrl.py`):
+
+| Backend (`--embedding-backend`) | Checkpoint / Modelo | Ubicación | Dimensiones MRL válidas (por defecto primera) | Colección Qdrant |
+|---|---|---|---|---|
+| `gemini` (por defecto) | `gemini-embedding-2-preview` | `Cloud API` | **`3072`**, `1536`, `768` | `video_chunks` (en 3072) / `video_chunks__gemini__<dim>` |
+| `qwen3-vl-2b` | `Qwen/Qwen3-VL-Embedding-2B` | `Local MPS` / `Local CPU` | **`2048`**, `1536`, `768` | `video_chunks__qwen3-vl-2b__<dim>` |
+| `gemma2` | `google/embeddinggemma-2` | `Local MPS` / `Local CPU` | **`768`**, `512`, `256` | `video_chunks__gemma2__<dim>` |
+
+- **`GeminiMultimodalVectorizer` (`gemini_vectorizer.py`)**: codifica los 3 fotogramas clave a JPEG y adjunta la transcripción en un único `types.Content` hacia `gemini-embedding-2-preview` (1 petición por chunk o consulta multimodal).
+- **`LocalMultimodalVectorizer` (`local_vectorizer.py`)**: carga `sentence-transformers` de forma perezosa y adapta el formato multimodal por perfil (diccionario con imágenes PIL RGB y prompts de documento/consulta en Qwen3-VL; marcas `<|image|>` y prefijos `Document`/`SearchQuery` en EmbeddingGemma 2). Serializa llamadas bajo un `threading.Lock` y rechaza valores `NaN` o infinitos con `VectorizationError`.
+- **Regla de dtype y aviso crítico de `float16`**: los modelos locales usan estrictamente `torch.bfloat16` cuando `mps` está disponible y `torch.float32` en `cpu` (no existe parámetro para usar `float16`, porque **EmbeddingGemma 2 produce valores `NaN` silenciosos en `float16`**).
+- **Gestión de memoria (`factory.py`)**: `create_vectorizer` y `unload_active_vectorizer` mantienen como máximo **un modelo local residente en memoria** a la vez; al cambiar de modelo o pasar a `gemini`, se libera la referencia y se ejecuta `gc.collect()` junto con `torch.mps.empty_cache()`.
+- **Descarga inicial de pesos locales**: la primera ejecución con `qwen3-vl-2b` y `gemma2` descarga en conjunto **unos 6 GB** de pesos en `~/.cache/huggingface` (~4 GB Qwen3-VL 2B y ~2 GB EmbeddingGemma 2).
 
 ### 4.4 Pipeline de ingestión: `src/processing/pipeline.py`
-`process_video_pipeline(video_path, max_concurrent_requests=3, progress_callback=None, threshold=0.5, min_shot_frames=12, resize_width=160, entropy_stride=1, jpeg_quality=80, output_dimensionality=3072, target_width=512, max_shot_duration=8.0, enable_audio=True, whisper_model="base")`:
-1. Ejecuta `process_video_single_pass` y verifica el cortafuegos `MAX_CHUNKS_PER_VIDEO = 800` (`QuotaSafetyError`).
+`process_video_pipeline(..., output_dimensionality=3072, embedding_backend="gemini")`:
+1. Ejecuta `process_video_single_pass` y verifica el cortafuegos `MAX_CHUNKS_PER_VIDEO = 800` (`QuotaSafetyError`) exclusivamente en backends en la nube (`gemini`).
 2. Si `enable_audio=True`, ejecuta `transcribe_video_audio` y `align_transcript_with_chunks`. Ante cualquier fallo de `ffmpeg` o del modelo local, registra un `WARNING` y continúa con la modalidad visual (**degradación elegante**).
-3. Guarda en caché los fotogramas clave (`data/processed/`) y vectoriza asíncronamente los chunks con `asyncio.Semaphore(max_concurrent_requests)`.
+3. Guarda en caché los fotogramas clave (`data/processed/`). Si el backend es local, ejecuta `unload_whisper_models()` antes de cargar el modelo de embeddings y fuerza concurrencia `1` para proteger la memoria unificada.
 
 ### 4.5 Base de datos vectorial y fachada de servicio: `src/rag_engine/vector_db.py` y `src/rag_engine/service.py`
-- **`QdrantSearchEngine`**: persiste en `./data/vector_db` con métrica coseno e IDs deterministas (`uuid5`). Almacena en el `payload` los campos `video_name`, `chunk_index`, `start_time`, `end_time` y `transcript`, devolviendo objetos `SearchResult`.
-- **`VideoRAGService`**: coordina la indexación, cachea embeddings de consulta repetidos y aplica deduplicación temporal sobre los candidatos recuperados de Qdrant (`_deduplicate_temporal_candidates`) antes de enviarlos al verificador de Etapa 2, fusionando dos candidatos del mismo vídeo en su envolvente `[min(start_time), max(end_time)]` bajo dos criterios:
-  1. **Micro-fragmentos de una misma escena (`is_micro_neighbor`)**: ambos fragmentos duran `< 1.0 s` (`micro_chunk_duration`) y sus centros distan `< 4.0 s` (`min_scene_separation`).
-  2. **Fragmentos contiguos con idéntica locución (`is_same_transcript_neighbor`)**: ambos comparten exactamente la misma transcripción hablada no vacía y su separación temporal es `gap <= 4.0 s`, evitando que una misma escena con movimiento interno (dividida por SSIM en varios cortes de `1-4 s` bajo la misma frase del narrador) acapare múltiples plazas en el lote enviado al reranker VLM.
-  Al fusionar fragmentos, `_merge_transcripts` une las locuciones en orden cronológico eliminando solapamientos de palabras o frases repetidas en la frontera.
+- **`QdrantSearchEngine`**: persiste en `./data/vector_db` con métrica coseno e IDs deterministas (`uuid5`) sobre la colección activa (`use_collection`). Conserva `video_chunks` exclusivamente para `gemini` en `3072` dimensiones y utiliza el prefijo `video_chunks__<backend>__<dim>` para el resto de combinaciones. Si una colección ya existe con una dimensión distinta y `recreate=False`, `create_collection` lanza `VectorDBError` sin borrar los vectores existentes.
+- **`VideoRAGService`**: gestiona `(embedding_backend, vector_size)` con `set_embedding`, coordina la indexación registrando `last_index_stats` (`IndexStats`), cachea embeddings de consulta por `(backend, dimensión, modalidades)` y aplica deduplicación temporal (`_deduplicate_temporal_candidates`) antes de enviar candidatos al reranker VLM.
 
 ### 4.6 Reordenación y Verificación Bimodal (Etapa 2): `src/rag_engine/reranker.py`
 - **`MultimodalReranker`**: combina los fotogramas cacheados de cada candidato en un collage vertical y adjunta su `transcript` alineado (además de las imágenes de referencia `query_images` de la consulta cuando el usuario las aporta) en una única llamada por lotes a `gemini-3.5-flash-lite`.
@@ -172,6 +183,7 @@ streamlit run app.py
 ```
 
 #### Características de la UI:
+- **Selector de motor de embeddings**: en la barra lateral (**Motor de Embeddings**), permite alternar entre `Cloud: Gemini`, `Local: Qwen3-VL 2B` y `Local: EmbeddingGemma 2`, ajustando dinámicamente las dimensiones MRL válidas, la colección activa de Qdrant, el dispositivo (`Cloud API`, `Local MPS` o `Local CPU`) y el tiempo de indexación (`chunks`, segundos y `s/chunk`).
 - **Gestión e indexación de vídeos**: subida de archivos (`.mp4`, `.avi`, `.mov`, `.mkv`), indexación de vídeos locales en `data/raw/`, re-indexación y borrado selectivo o completo de la base de datos.
 - **Consultas multimodales con dos botones desplegables junto al buscador**:
   - **`Audio`**: permite grabar voz directamente desde el micrófono (`st.audio_input`) y/o subir una o varias pistas de audio (`.wav`, `.mp3`, `.m4a`, `.ogg`).
@@ -196,15 +208,19 @@ streamlit run app.py
 ### 6.2 Línea de Comandos (CLI)
 
 ```bash
-# Indexar un vídeo con transcripción Whisper (modelo base por defecto) y buscar
+# Indexar un vídeo con Gemini (por defecto) y buscar
 python -m src.main --index --video python_tutorial.mp4
+
+# Indexar y buscar en local con Qwen3-VL 2B o EmbeddingGemma 2 (sin rerank = sin cuota cloud)
+python -m src.main --index --video python_tutorial.mp4 --embedding-backend qwen3-vl-2b
+python -m src.main --index --video python_tutorial.mp4 --embedding-backend gemma2 --no-rerank
 
 # Indexar con otro modelo de Whisper o desactivando el audio
 python -m src.main --index --video python_tutorial.mp4 --whisper-model small
 python -m src.main --index --video animals.mp4 --no-audio
 
-# Buscar sobre la colección ya indexada en Qdrant (bucle interactivo)
-python -m src.main
+# Buscar sobre la colección del backend/dimensión elegidos (bucle interactivo)
+python -m src.main --embedding-backend gemma2 --no-rerank
 
 # Búsqueda multimodal directa (one-shot) combinando texto, .txt, imágenes y/o audios
 python -m src.main --query "camaleón" --query-txt nota.txt --query-images ref.jpg --query-audios voz.wav
@@ -214,8 +230,10 @@ python -m src.main --query "camaleón" --query-txt nota.txt --query-images ref.j
 |---|---|---|
 | `--index` | desactivado | Fragmenta, transcribe, vectoriza e indexa el vídeo antes de buscar |
 | `--video` | `test_video.mp4` | Nombre del vídeo dentro de `data/raw/` |
+| `--embedding-backend` | `gemini` | Motor de embeddings: `gemini`, `qwen3-vl-2b` o `gemma2` |
+| `--output-dimensionality` | nativa del backend | Dimensión Matryoshka validada por backend (`gemini`: 3072/1536/768; `qwen3-vl-2b`: 2048/1536/768; `gemma2`: 768/512/256) |
 | `--top-k` | `5` | Número de resultados devueltos por búsqueda |
-| `--max-concurrent` | `3` | Peticiones simultáneas máximas a Gemini |
+| `--max-concurrent` | `3` | Peticiones simultáneas a Gemini (los backends locales fuerzan `1` y emiten aviso si se indica `> 1`) |
 | `--threshold` | `0.5` | Umbral SSIM para detección de cortes de plano |
 | `--min-shot-frames` | `12` | Mínimo de fotogramas por plano |
 | `--entropy-stride` | `1` | Paso de muestreo para cálculo de entropía |
@@ -272,7 +290,7 @@ Cada sesión en CLI (`src/main.py`) o Streamlit (`src/ui/app.py`) crea una carpe
 | Fichero | Contenido |
 |---|---|
 | `execution.log` | Logs completos a nivel `DEBUG` (segmentación, alineación de audio, llamadas HTTP, Qdrant y reranker) |
-| `run_config.json` | Parámetros de ejecución (`chunking_defaults`, `vectorizer_defaults`, `search_defaults`, `audio_defaults`, `cli_args`) |
+| `run_config.json` | Parámetros de ejecución (`embedding_backend`, `embedding_dimension`, `device`, `index_seconds`, `chunking_defaults`, `vectorizer_defaults`, `search_defaults`, `audio_defaults`, `cli_args`) |
 | `search_results.json` | Historial de búsquedas de la sesión incluyendo `modalities` (`modality_summary`), `score`, `relevance_score`, `is_relevant`, `reasoning` y `transcript` |
 
 ## 9. Resultados empíricos con fusión audiovisual
@@ -296,13 +314,23 @@ Comparativa entre la línea base visual (`2026-11-06`, [`informe_pruebas_e2e.md`
 | `animals.mp4` (46 consultas) | Etapa 2 (Juez Bimodal) | **Recall@5 / MRR** | 93,5 % / 0,913 | **97,8 % / 0,951** | **+4,3 pp / +0,038** |
 | Ambos vídeos (16 negativas) | Etapa 2 (Juez Bimodal) | **Rechazo de falsos positivos** | 100,0 % (0/80 FP) | **100,0 % (0/80 FP)** | **=** |
 
+### 9.3 Comparativa de backends de embeddings en `python_tutorial.mp4` (Etapa 1, sin reranker)
+Resultados medidos en Apple Silicon (`Local MPS` con `bfloat16`, `target_width=512`, 82 chunks y 56 consultas de [`video_chunks_ground_truth.csv`](data/dataframe_gt/video_chunks_ground_truth.csv), fuente: [`embedding_backends_20261113.csv`](data/e2e_results/embedding_backends_20261113.csv)):
+
+| Backend | Dim | Dispositivo | Index (s) | s/chunk | Recall@1 | Recall@5 | MRR | Query mediana (ms) | Pico RSS (MB) | Pico MPS (MB) |
+|---|---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| `gemini` | 3072 | `Cloud API` | - (reutilizado) | - | 0,8571 | 0,9464 | 0,8973 | 419,83 | 383,0 | - |
+| `qwen3-vl-2b` | 2048 | `Local MPS` | 160,99 | 1,963 | 0,7500 | 0,9464 | 0,8289 | 142,78 | 2509,4 | 4736,5 |
+| `gemma2` | 768 | `Local MPS` | 272,99 | 3,329 | 0,7679 | 0,9643 | 0,8512 | 33,07 | 3070,0 | 2552,5 |
+
 ## 10. Tests y calidad de código
 
 ```bash
-python -m pytest                                                 # pruebas unitarias (147 tests, sin red ni GPU)
-python -m pytest tests/e2e -m e2e -q                             # baterías E2E con la API real de Gemini
-python -m ruff check src tests app.py                            # linter
-python -m mypy --explicit-package-bases src tests app.py         # tipado estático
+python -m pytest                                                                                           # pruebas unitarias (231 tests, sin red ni GPU)
+python -m pytest tests/e2e -m e2e -q                                                                       # baterías E2E con la API real de Gemini
+python -m pytest tests/e2e/test_local_models_smoke_e2e.py tests/e2e/test_embedding_backends_e2e.py -m e2e_local -v  # humo MPS y benchmark comparativo (escribe CSV en data/e2e_results/)
+python -m ruff check src tests                                                                             # linter
+python -m mypy --strict --explicit-package-bases src tests                                                 # tipado estático estricto
 ```
 
-Las 147 pruebas unitarias se ejecutan en ~2 segundos simulando `ffmpeg`, Whisper y el cliente de Gemini, y utilizando Qdrant en memoria o en directorios temporales. Las pruebas E2E (`tests/e2e/`) evalúan las baterías literal (`data/dataframe_gt/video_chunks_ground_truth.csv`), multi-objetivo y negativa sobre `animals.mp4` y `python_tutorial.mp4`.
+Las 231 pruebas unitarias se ejecutan en ~2,5 segundos simulando `ffmpeg`, Whisper, el cliente de Gemini y `SentenceTransformer`, y utilizando Qdrant en memoria o en directorios temporales. Las pruebas `-m e2e` evalúan las baterías literal (`data/dataframe_gt/video_chunks_ground_truth.csv`), multi-objetivo y negativa sobre `animals.mp4` y `python_tutorial.mp4` con Gemini. Las pruebas `-m e2e_local` validan los pesos reales en `bfloat16` sobre Apple MPS (sin `NaN`, orden de marcas `<|image|>` y consulta de solo imagen en Gemma 2) y generan el informe comparativo en `data/e2e_results/`.
