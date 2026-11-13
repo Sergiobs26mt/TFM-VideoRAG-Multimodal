@@ -1,12 +1,12 @@
 \subsection{Canalización de Ingesta Adaptativa y Fusión Temprana Audio-Visual}
 \label{subsec:pipeline_ingesta_fasion_temprana}
 
-El procesamiento de secuencias de vídeo continuas de larga duración requiere segmentar el metraje en unidades semánticas discretas que preserven la coherencia visual y auditiva, respetando estrictamente las cuotas de inferencia de la API fundacional ($100\text{ RPM}$, $30.000\text{ TPM}$ y $1.000\text{ RPD}$) \cite{gemini_emb2_docs}.
+El procesamiento de secuencias de vídeo continuas de larga duración requiere segmentar el metraje en unidades semánticas discretas que preserven la coherencia visual y auditiva, respetando estrictamente las cuotas de inferencia cuando se emplea la API fundacional ($100\text{ RPM}$, $30.000\text{ TPM}$ y $1.000\text{ RPD}$) \cite{gemini_emb2_docs} o optimizando el presupuesto de memoria unificada cuando se ejecutan motores locales en GPU.
 
 \subsubsection{Segmentación Temporal Adaptativa mediante Similitud Estructural (SSIM)}
 En lugar de emplear ventanas temporales fijas que fragmentan arbitrariamente eventos continuos o introducen mezclas incoherentes de planos, el sistema implementa una segmentación adaptativa de una sola pasada (\textit{single-pass}). 
 
-Para cada par de fotogramas secuenciales en escala de grises $I_{t-1}, I_t$, se evalúa el Índice de Similitud Estructural (\textit{Structural Similarity Index Measure}, SSIM):
+Para cada par de fotogramas secuenciales en escala de grises $I_{t-1}, I_t$, se evalúa el Índice de Similitud Estructural (\textit{Structural Similarity Index Measure}, SSIM) \cite{wang2004ssim}:
 \begin{equation}
     \text{SSIM}(I_{t-1}, I_t) = \frac{(2\mu_{t-1}\mu_t + C_1)(2\sigma_{t-1,t} + C_2)}{(\mu_{t-1}^2 + \mu_t^2 + C_1)(\sigma_{t-1}^2 + \sigma_t^2 + C_2)}
 \end{equation}
@@ -16,10 +16,10 @@ Un corte de plano se declara formalmente en el instante $t$ si se satisface la c
 \begin{equation}
     \text{Corte}(t) = \left( \text{SSIM}(I_{t-1}, I_t) < \theta_{\text{SSIM}} \land \Delta t_{\text{actual}} \ge T_{\min} \right) \lor \left( \Delta t_{\text{actual}} \ge T_{\max} \right)
 \end{equation}
-donde $\theta_{\text{SSIM}} = 0,65$, $T_{\min} = 1,0\text{ s}$ y $T_{\max} = 12,0\text{ s}$. Para cada plano detectado, se extraen tres fotogramas clave correspondientes al instante inicial ($t_{\text{start}}$), medio ($t_{\text{mid}}$) y final ($t_{\text{end}}$). Cada fotograma es escalado a un ancho uniforme de 512 píxeles mediante interpolación bilineal y codificado en formato JPEG (calidad 80\%), reduciendo sustancialmente el tamaño de transferencia sin degradar la geometría espacial.
+donde la configuración de dominio por defecto (\texttt{ChunkingConfig}) establece $\theta_{\text{SSIM}} = 0,50$, $T_{\min} = 12\text{ fotogramas}$ ($\approx 0,4\text{--}0,5\text{ s}$) y $T_{\max} = 8,0\text{ s}$ (ajustándose en el banco de pruebas E2E a $\theta_{\text{SSIM}} = 0,60, T_{\max} = 5,0\text{ s}$ para tutoriales de código estático y manteniendo $0,50 / 8,0\text{ s}$ en metraje documental). Para cada plano detectado de $n$ fotogramas ($n \ge 3$), el selector descarta un margen exterior del $10\%$ en ambos extremos ($\text{margin} = \lfloor n/10 \rfloor$), divide el intervalo interior en tres tercios equivalentes y selecciona en cada tercio el fotograma clave de \textbf{máxima entropía visual de Shannon} ($f^* = \arg\max H(F_t)$), evitando así fotogramas borrosos de transición. Cada fotograma seleccionado se escala a un ancho uniforme de $512$ píxeles mediante interpolación por áreas (\texttt{cv2.INTER\_AREA}) y se codifica en formato JPEG (calidad $80\%$), reduciendo la carga útil sin degradar la legibilidad tipográfica ni geométrica.
 
 \subsubsection{Extracción y Alineación Forzada de la Locución Auditiva}
-De forma paralela a la segmentación visual, la pista de audio completa del contenedor de vídeo es desacoplada mediante \texttt{ffmpeg}, remuestreada a $16\text{ kHz}$ en formato PCM monocanal y procesada con el modelo de reconocimiento automático del habla OpenAI Whisper (\textit{checkpoint} \texttt{base}) \cite{whisperx_silero}.
+De forma secuencial o desacoplada a la segmentación visual, la pista de audio completa del contenedor de vídeo es desacoplada mediante \texttt{ffmpeg}, remuestreada a $16\text{ kHz}$ en formato PCM monocanal y procesada con el modelo de reconocimiento automático del habla OpenAI Whisper (\textit{checkpoint} \texttt{base}) \cite{radford2023whisper}.
 
 Whisper produce un flujo de segmentos transcritos $\mathcal{A} = \{A_1, A_2, \dots, A_M\}$, donde cada segmento $A_k = (t_{a,k}^{\text{start}}, t_{a,k}^{\text{end}}, w_k)$ incluye marcas temporales de alta resolución y el texto fonético correspondiente $w_k$. La alineación forzada entre los planos visuales $C_i = [t_i^{\text{start}}, t_i^{\text{end}}]$ y las locuciones auditivas se establece evaluando el solape temporal efectivo:
 \begin{equation}
@@ -32,11 +32,10 @@ Un segmento de locución se vincula al fragmento visual $C_i$ si cumple el umbra
 \end{equation}
 
 \subsubsection{Fusión Temprana Omnimodal en Solicitud Única}
-Para cumplir con los límites de cuota de la capa gratuita sin renunciar a la riqueza perceptual de ambas modalidades, la inyección de la información visual y auditiva se efectúa mediante fusión temprana (\textit{early fusion}). 
+Para preservar la riqueza perceptual conjunta sin duplicar el coste de llamadas ni fragmentar los espacios latentes, la inyección de la información visual y auditiva se efectúa mediante fusión temprana (\textit{early fusion}) detrás del protocolo común \texttt{MultimodalVectorizer}.
 
-Los tres fotogramas clave codificados en JPEG se transforman en objetos binarios estructurados de tipo imagen (\texttt{types.Part.from\_bytes}), mientras que la locución alineada $\tau_i$ se incorpora como una parte textual explícita (\texttt{types.Part.from\_text}) dentro del mismo contenedor unificado \texttt{types.Content}. La petición a la API de \textit{Gemini Embedding 2} se formula en un único paquete atómico:
+En el backend remoto (\textit{Gemini Embedding 2}), los tres fotogramas clave codificados en JPEG se transforman en objetos binarios de imagen (\texttt{types.Part.from\_bytes}) junto a la locución alineada $\tau_i$ (\texttt{types.Part.from\_text}) dentro de un único contenedor \texttt{types.Content}:
 \begin{equation}
     \text{Payload}_i = \left\{ \text{parts}: \left[ \text{JPEG}(f_{i,1}), \text{JPEG}(f_{i,2}), \text{JPEG}(f_{i,3}), \text{Text}(\tau_i) \right] \right\}
 \end{equation}
-
-Este diseño garantiza que cada fragmento audiovisual consume exactamente una única llamada a la API de vectorización, preservando una estricta invarianza en el coste de cuota ($1\text{ chunk} = 1\text{ request}$) con independencia de la duración o complejidad del segmento.
+En los backends locales (\textit{Qwen3-VL-Embedding-2B} y \textit{EmbeddingGemma 2}), el adaptador transforma el mismo par $(\mathcal{F}_i, \tau_i)$ en la representación nativa esperada por cada arquitectura: diccionarios multimodales (\texttt{\{image, text\}}) para \textit{Qwen3-VL-2B} y plantillas prefijadas con etiquetas \texttt{<|image|>} intercaladas por cada fotograma para \textit{EmbeddingGemma 2}. Este diseño unificado preserva una estricta invarianza estructural ($1\text{ chunk} = 1\text{ vector}$) con independencia del motor remoto o local seleccionado.

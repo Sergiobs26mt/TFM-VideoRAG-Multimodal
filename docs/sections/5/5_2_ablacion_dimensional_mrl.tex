@@ -1,36 +1,148 @@
 \subsection{Estudio de Ablación Dimensional con Matryoshka Representation Learning (MRL)}
 \label{subsec:ablacion_dimensional_mrl}
 
-Para contrastar la Hipótesis 2 ($H_2$), se analizó el impacto del truncamiento prefijo y renormalización $L_2$ sobre los $164$ fragmentos de los dos vídeos de referencia en las tres resoluciones dimensionales soportadas por \textit{Gemini Embedding 2}: $d = 3072$ (nativa), $d = 1536$ (reducción del 50\%) y $d = 768$ (reducción del 75\%).
+Para contrastar la Hipótesis 2 ($H_2$), se analizó el impacto del truncamiento prefijo y re-normalización $L_2$ sobre los $164$ fragmentos de los dos vídeos de referencia en las tres resoluciones dimensionales soportadas por \textit{Gemini Embedding 2}: $d = 3072$ (nativa), $d = 1536$ (reducción del $50\%$) y $d = 768$ (reducción del $75\%$).
+
+\subsubsection{Fundamento Matemático del Truncado Prefijo y Re-Normalización $L_2$}
+Cuando el codificador devuelve el vector nativo $\mathbf{v} \in \mathbb{R}^{3072}$, su norma euclídea es unitaria: $\|\mathbf{v}\|_2 = \sqrt{\sum_{j=1}^{3072} v_j^2} = 1,0$ \cite{gemini_emb2_docs}. Al truncar el vector a una sub-dimensión $d < 3072$ tomando sus primeras coordenadas $\mathbf{v}_{1:d} = (v_1, \dots, v_d)^\top$, se descartan las coordenadas de cola $[d+1 : 3072]$, por lo que la norma euclídea del sub-vector pasa a ser estrictamente inferior a la unidad:
+\begin{equation}
+    \|\mathbf{v}_{1:d}\|_2^2 = \sum_{j=1}^{d} v_j^2 = 1 - \sum_{j=d+1}^{3072} v_j^2 < 1,0
+    \label{eq:perdida_norma_mrl}
+\end{equation}
+
+Si el sub-vector truncado se indexase en Qdrant sin corregir su magnitud, la métrica del coseno sobre grafos HNSW \cite{malkov2020hnsw} perdería invariancia geométrica porque el producto escalar dejaría de coincidir con el coseno del ángulo. Para restablecer la coherencia en todos los motores, \texttt{truncate\_and\_normalize\_mrl} en \texttt{src/embeddings/mrl.py} aplica un recorte prefijo seguido de re-normalización $L_2$ explícita:
+\begin{equation}
+    \hat{\mathbf{v}}_{1:d} = \frac{\mathbf{v}_{1:d}}{\|\mathbf{v}_{1:d}\|_2} = \frac{(v_1, v_2, \dots, v_d)^\top}{\sqrt{\sum_{j=1}^{d} v_j^2}}, \quad \text{con } \|\hat{\mathbf{v}}_{1:d}\|_2 = 1,0
+    \label{eq:formula_mrl_l2_tex}
+\end{equation}
+En la arquitectura actual (\texttt{src/config.py}), las dimensiones admisibles por backend se declaran en \texttt{EMBEDDING\_\allowbreak BACKENDS} y cada pareja $(b, d)$ se aísla mediante \texttt{collection\_name\_for} junto con una clave \texttt{SHA-256} específica en caché para impedir colisiones entre resoluciones.
 
 \subsubsection{Comportamiento en Consultas Literales de Evento Único}
-El Cuadro~\ref{tab:ablacion_mrl_global} sintetiza el rendimiento comparativo obtenido sobre el conjunto de las 102 consultas literales en la Etapa 1 de recuperación densa en Qdrant.
+El Cuadro~\ref{tab:ablacion_mrl_literales} sintetiza el rendimiento comparativo desglosado por corpus y agregado sobre el conjunto de las $102$ consultas literales en la Etapa 1 de recuperación densa en Qdrant, y la Figura~\ref{fig:grafica_compromiso_mrl} ilustra el compromiso entre precisión semántica, memoria y latencia.
 
 \begin{table}[htbp]
 \centering
 \small
 \setlength{\tabcolsep}{3.0pt}
-\caption{Resultados globales de la ablación dimensional MRL sobre 102 consultas literales en la Etapa 1 (Qdrant).}
-\label{tab:ablacion_mrl_global}
+\caption{Resultados de la ablación dimensional MRL sobre consultas literales de evento único ($102$ consultas, $164$ fragmentos en precisión \texttt{float32}) en la Etapa 1 (Qdrant).}
+\label{tab:ablacion_mrl_literales}
 \begin{adjustbox}{max width=\linewidth}
-\begin{tabular}{lccccccc}
+\begin{tabular}{llccccccc}
 \toprule
-\textbf{Dimensión ($d$)} & \textbf{Recall@1} & \textbf{Recall@3} & \textbf{Recall@5} & \textbf{MRR} & \begin{tabular}[c]{@{}c@{}}\textbf{Memoria}\\\textbf{/Vector}\end{tabular} & \begin{tabular}[c]{@{}c@{}}\textbf{Ahorro}\\\textbf{Memoria}\end{tabular} & \begin{tabular}[c]{@{}c@{}}\textbf{Latencia}\\\textbf{Qdrant}\end{tabular} \\
+\textbf{Corpus} & \textbf{Dim. ($d$)} & \textbf{\textit{Recall@1}} & \textbf{\textit{Recall@3}} & \textbf{\textit{Recall@5}} & \textbf{MRR} & \textbf{KB/vec} & \textbf{Ahorro} & \textbf{Latencia} \\
 \midrule
-$d = \mathbf{3072}$ (Nativa) & $\mathbf{79,41\%}$ ($81/102$) & $93,14\%$ ($95/102$) & $97,06\%$ ($99/102$) & $0,8688$ & $12,00\text{ KB}$ & $0,0\%$ & $1,142\text{ ms}$ \\ \addlinespace[2pt]
-$d = \mathbf{1536}$ ($-50\%$) & $78,43\%$ ($80/102$) & $93,14\%$ ($95/102$) & $98,04\%$ ($100/102$) & $0,8659$ & $6,00\text{ KB}$ & $\mathbf{50,0\%}$ & \begin{tabular}[c]{@{}c@{}}$0,766\text{ ms}$\\($-33,0\%$)\end{tabular} \\ \addlinespace[2pt]
-$d = \mathbf{768}$ ($-75\%$)  & $78,43\%$ ($80/102$) & $\mathbf{94,12\%}$ ($96/102$) & $\mathbf{99,02\%}$ ($101/102$) & $\mathbf{0,8691}$ & $3,00\text{ KB}$ & $\mathbf{75,0\%}$ & \begin{tabular}[c]{@{}c@{}}$\mathbf{0,635\text{ ms}}$\\($\mathbf{-44,4\%}$)\end{tabular} \\
+\texttt{python\_tutorial} & $3072$ & $85,71\%$ ($48/56$) & $92,86\%$ ($52/56$) & $94,64\%$ ($53/56$) & $0,8973$ & $12,00$ & $0,0\%$ & $1,1688\text{ ms}$ \\
+\texttt{python\_tutorial} & $1536$ & $85,71\%$ ($48/56$) & $92,86\%$ ($52/56$) & $96,43\%$ ($54/56$) & $0,9009$ & $6,00$ & $50,0\%$ & $0,7502\text{ ms}$ \\
+\texttt{python\_tutorial} & $768$  & $85,71\%$ ($48/56$) & $92,86\%$ ($52/56$) & $\mathbf{98,21\%}$ ($55/56$) & $\mathbf{0,9045}$ & $3,00$ & $\mathbf{75,0\%}$ & $\mathbf{0,6297\text{ ms}}$ \\
+\midrule
+\texttt{animals.mp4}      & $3072$ & $\mathbf{71,74\%}$ ($33/46$) & $93,48\%$ ($43/46$) & $\mathbf{100,0\%}$ ($46/46$) & $\mathbf{0,8341}$ & $12,00$ & $0,0\%$ & $1,1104\text{ ms}$ \\
+\texttt{animals.mp4}      & $1536$ & $69,57\%$ ($32/46$) & $93,48\%$ ($43/46$) & $\mathbf{100,0\%}$ ($46/46$) & $0,8232$ & $6,00$ & $50,0\%$ & $0,7848\text{ ms}$ \\
+\texttt{animals.mp4}      & $768$  & $69,57\%$ ($32/46$) & $\mathbf{95,65\%}$ ($44/46$) & $\mathbf{100,0\%}$ ($46/46$) & $0,8261$ & $3,00$ & $\mathbf{75,0\%}$ & $\mathbf{0,6418\text{ ms}}$ \\
+\midrule
+\textbf{Global (102 q)}   & $3072$ & $\mathbf{79,41\%}$ ($81/102$) & $93,14\%$ ($95/102$) & $97,06\%$ ($99/102$) & $0,8688$ & $12,00$ & $0,0\%$ & $1,1425\text{ ms}$ \\
+\textbf{Global (102 q)}   & $1536$ & $78,43\%$ ($80/102$) & $93,14\%$ ($95/102$) & $98,04\%$ ($100/102$) & $0,8659$ & $6,00$ & $50,0\%$ & $0,7658\text{ ms}$ \\
+\textbf{Global (102 q)}   & $768$  & $78,43\%$ ($80/102$) & $\mathbf{94,12\%}$ ($96/102$) & $\mathbf{99,02\%}$ ($101/102$) & $\mathbf{0,8691}$ & $3,00$ & $\mathbf{75,0\%}$ & $\mathbf{0,6352\text{ ms}}$ \\
 \bottomrule
 \end{tabular}
 \end{adjustbox}
 \end{table}
 
-El análisis desagregado por corpus audiovisual revela patrones fundamentales sobre la estructura interna de los embeddings:
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+% Cuadrante 1: Métricas de Recuperación (Recall)
+\begin{scope}
+\draw[-stealth, thick, black!70] (0,0) -- (5.5,0);
+\draw[-stealth, thick, black!70] (0,0) -- (0,3.95) node[above=2pt, font=\scriptsize\bfseries] {Porcentaje (\%)};
+
+\foreach \y/\label in {0.6/75\%, 1.8/85\%, 3.0/95\%, 3.6/100\%} {
+    \draw[gray!30, thin] (0,\y) -- (5.2,\y);
+    \node[left=2pt, font=\tiny] at (0,\y) {\label};
+}
+
+\node[below=3pt, font=\scriptsize\bfseries] at (1.0,0) {$768$};
+\node[below=3pt, font=\scriptsize\bfseries] at (2.7,0) {$1.536$};
+\node[below=3pt, font=\scriptsize\bfseries] at (4.4,0) {$3.072$};
+\node[below=16pt, font=\scriptsize\bfseries] at (2.7,0) {Dimensión ($d$)};
+
+% Curva Recall@5 Global: 99.02% (3.48), 98.04% (3.36), 97.06% (3.25)
+\draw[very thick, green!60!black] (1.0, 3.48) -- (2.7, 3.36) -- (4.4, 3.25);
+\foreach \x/\y in {1.0/3.48, 2.7/3.36, 4.4/3.25} {
+    \fill[green!60!black] (\x,\y) circle (2.2pt);
+}
+\node[above=3pt, font=\tiny\bfseries, green!55!black] at (1.0, 3.48) {R@5: 99,0\%};
+\node[above=3pt, font=\tiny\bfseries, green!55!black] at (4.4, 3.25) {97,1\%};
+
+% Curva Recall@3 Global: 94.12% (2.89), 93.14% (2.77), 93.14% (2.77)
+\draw[thick, blue!80!black] (1.0, 2.89) -- (2.7, 2.77) -- (4.4, 2.77);
+\foreach \x/\y in {1.0/2.89, 2.7/2.77, 4.4/2.77} {
+    \node[fill=blue!80!black, minimum size=3.8pt, inner sep=0pt] at (\x,\y) {};
+}
+\node[below=3pt, font=\tiny\bfseries, blue!80!black] at (1.0, 2.89) {R@3: 94,1\%};
+\node[below=3pt, font=\tiny\bfseries, blue!80!black] at (4.4, 2.77) {93,1\%};
+
+% Curva Recall@1 Global: 78.43% (1.01), 78.43% (1.01), 79.41% (1.13)
+\draw[very thick, red!80!black] (1.0, 1.01) -- (2.7, 1.01) -- (4.4, 1.13);
+\foreach \x/\y in {1.0/1.01, 2.7/1.01, 4.4/1.13} {
+    \node[regular polygon, regular polygon sides=3, fill=red!80!black, minimum size=4.8pt, inner sep=0pt] at (\x,\y) {};
+}
+\node[below=3pt, font=\tiny\bfseries, red!80!black] at (1.0, 1.01) {R@1: 78,4\%};
+\node[above=3pt, font=\tiny\bfseries, red!80!black] at (4.4, 1.13) {79,4\%};
+
+\node[font=\footnotesize\bfseries, align=center] at (2.7, 4.95) {(a) Precisión de Recuperación en Qdrant\\[-1pt]{\scriptsize\normalfont\textit{(Retención semántica $>98,8\%$ en R@1)}}};
+\end{scope}
+
+% Cuadrante 2: Eficiencia (Ahorro Memoria y Latencia)
+\begin{scope}[xshift=7.8cm]
+\draw[-stealth, thick, black!70] (0,0) -- (5.4,0);
+\draw[-stealth, thick, blue!75!black] (0,0) -- (0,3.95) node[above=2pt, font=\scriptsize\bfseries, blue!75!black] {Ahorro RAM (\%)};
+\draw[-stealth, thick, orange!80!black] (5.4,0) -- (5.4,3.95) node[above=2pt, font=\scriptsize\bfseries, orange!80!black] {Latencia (ms)};
+
+\foreach \y/\label in {0.9/25\%, 1.8/50\%, 2.7/75\%, 3.6/100\%} {
+    \draw[gray!30, thin] (0,\y) -- (5.4,\y);
+    \node[left=2pt, font=\tiny, blue!75!black] at (0,\y) {\label};
+}
+
+\foreach \y/\label in {1.2/0{,}40, 2.4/0{,}80, 3.6/1{,}20} {
+    \draw[orange!70!black, thin] (5.32,\y) -- (5.4,\y);
+    \node[right=2pt, font=\tiny, orange!80!black] at (5.4,\y) {\label};
+}
+
+\node[below=3pt, font=\scriptsize\bfseries] at (1.0,0) {$768$};
+\node[below=3pt, font=\scriptsize\bfseries] at (2.7,0) {$1.536$};
+\node[below=3pt, font=\scriptsize\bfseries] at (4.4,0) {$3.072$};
+\node[below=16pt, font=\scriptsize\bfseries] at (2.7,0) {Dimensión ($d$)};
+
+\fill[blue!20, draw=blue!80!black] (0.42, 0) rectangle (1.58, 2.70);
+\node[font=\tiny\bfseries, blue!90!black] at (1.0, 0.45) {+75\% RAM};
+
+\fill[blue!20, draw=blue!80!black] (2.12, 0) rectangle (3.28, 1.80);
+\node[font=\tiny\bfseries, blue!90!black] at (2.7, 0.45) {+50\% RAM};
+
+\fill[blue!10, draw=blue!50!black] (3.82, 0) rectangle (4.98, 0.05);
+\node[above=2pt, font=\tiny, text=gray!80!black] at (4.4, 0.08) {Línea base};
+
+\draw[very thick, orange!85!black] (1.0, 1.91) -- (2.7, 2.30) -- (4.4, 3.43);
+\foreach \x/\y in {1.0/1.91, 2.7/2.30, 4.4/3.43} {
+    \node[diamond, fill=orange!85!black, minimum size=5pt, inner sep=0pt] at (\x,\y) {};
+}
+\node[below=4pt, font=\tiny\bfseries, orange!75!black] at (1.0, 1.91) {$0{,}64\text{ ms}$};
+\node[above=4pt, font=\tiny\bfseries, orange!75!black, fill=white, inner sep=1pt] at (2.7, 2.30) {$0{,}77\text{ ms}$};
+\node[left=4pt, font=\tiny\bfseries, orange!75!black, fill=white, inner sep=1pt] at (4.4, 3.43) {$1{,}14\text{ ms}$};
+
+\node[font=\footnotesize\bfseries, align=center] at (2.7, 4.95) {(b) Eficiencia de Recursos\\[-1pt]{\scriptsize\normalfont\textit{(Ahorro de Almacenamiento y Latencia)}}};
+\end{scope}
+\end{tikzpicture}
+\caption{Compromiso dimensional Matryoshka (MRL): (a) retención prácticamente plana de \textit{Recall@1} ($79,4\% \to 78,4\%$) con leve mejora en \textit{Recall@5} ($97,1\% \to 99,0\%$) frente a (b) reducción del $75\%$ en memoria RAM ($12\text{ KB} \to 3\text{ KB}$ por vector) y descenso del $44,4\%$ en la latencia de búsqueda en Qdrant.}
+\label{fig:grafica_compromiso_mrl}
+\end{figure}
+
+El análisis desagregado consulta por consulta sobre los registros de auditoría revela patrones fundamentales sobre la estructura interna del subespacio Matryoshka:
 \begin{enumerate}
-    \item \textbf{Invarianza absoluta en dominio con locución sincronizada (\texttt{python\_tutorial.mp4}):} En las 56 consultas literales de Python, el \textit{Recall@1} se mantiene estrictamente invariante en un **$85,71\%$ ($48/56$)** y el \textit{Recall@3} en un **$92,86\%$ ($52/56$)** al pasar de 3072 a 1536 y 768 dimensiones. Ninguna de las 48 consultas que acertaron en primera posición en 3072 pierde su puesto al comprimir el vector un 75\%. De hecho, el \textit{MRR} experimenta una ligera mejoría ascendiendo de $0,8973$ ($d=3072$) a **$0,9045$ ($d=768$)**.
-    \item \textbf{Efecto de filtrado de ruido en \textit{Recall@5}:} En $d=768$, el \textit{Recall@5} global aumenta del $97,06\%$ al **$99,02\%$ ($101/102$ consultas acertadas)**. Este fenómeno se debe a que el truncamiento de las coordenadas de cola ($[768:3072]$) actúa como un regularizador implícito, descartando componentes de ruido de alta frecuencia asociados a elementos gráficos fijos (como la barra de estado del editor o fondos homogéneos) y realzando los componentes de baja frecuencia que capturan la semántica nuclear del plano.
-    \item \textbf{Estabilidad inter-dimensional en metraje de naturaleza (\texttt{animals.mp4}):} En el vídeo documental, 41 de las 46 consultas ($89,1\%$) conservan exactamente la misma posición en el ranking en las tres dimensiones. En las 46 consultas ($100,0\%$), el candidato correcto se localiza invariablemente dentro del \textit{Top-5} (\textit{Recall@5} = $100,0\%$), garantizando que la ventana de candidatos suministrada al reordenador de segunda etapa sea idéntica sin importar el nivel de compresión seleccionado.
+    \item \textbf{Invarianza topológica en dominio con locución sincronizada (\texttt{python\_tutorial.mp4}):} En las $56$ consultas literales de Python, el \textit{Recall@1} se mantiene estrictamente invariante en un \textbf{$85,71\%$ ($48/56$)} y el \textit{Recall@3} en un \textbf{$92,86\%$ ($52/56$)} al pasar de $3072$ a $1536$ y $768$ dimensiones. La inspección individual confirma que $53$ de las $56$ consultas ($94,6\%$) conservan exactamente la misma posición en las tres resoluciones, sin pérdida alguna entre las $48$ consultas resueltas en primer puesto; de hecho, el \textit{MRR} asciende ligeramente de $0,8973$ ($d=3072$) a \textbf{$0,9045$ ($d=768$)}.
+    \item \textbf{Efecto regularizador en \textit{Recall@5} sobre interfaces estáticas:} En $d=768$, el \textit{Recall@5} global aumenta del $97,06\%$ al \textbf{$99,02\%$ ($101/102$ consultas acertadas)}. Al transcurrir \texttt{python\_tutorial.mp4} sobre el fondo estático de Visual Studio Code, las coordenadas de cola ($[768:3072]$) capturan variaciones de alta frecuencia irrelevantes; al truncarlas, emergen dentro del \textit{Top-5} dos consultas que quedaban fuera en $3072\text{d}$: el símbolo de llaves tachado con cruz roja (que asciende al puesto \#5) y la salida de consola de \texttt{range(5)} (puesto \#4).
+    \item \textbf{Estabilidad inter-dimensional y significación estadística en \texttt{animals.mp4} y agregado ($N=102$):} En el documental de naturaleza, $41$ de las $46$ consultas ($89,1\%$) conservan rango idéntico entre resoluciones (solo una consulta, la del ciervo con cornamenta, pasa del \#1 al \#2) y el \textit{Recall@5} permanece en el $100,0\%$ ($46/46$). En las pruebas pareadas globales ($3072\text{d} \to 768\text{d}$, $N=102$), las diferencias resultan estadísticamente indistinguibles tanto en \textit{Recall@1} (prueba exacta de \textit{McNemar} $p = 1,0000$) como en \textit{MRR} (prueba de \textit{Wilcoxon} $p = 0,6729$), confirmando que la compresión MRL preserva íntegramente la distribución de rangos.
 \end{enumerate}
 
 \subsubsection{Validación Cuantitativa de la Hipótesis 2 ($H_2$)}
-Los resultados confirman con holgura la Hipótesis 2: la compresión del espacio latente a $d = 768$ dimensiones (reducción del $75\%$ en huella de memoria) retiene el **$98,77\%$ del \textit{Recall@1} relativo**, preserva un \textit{MRR} idéntico ($0,8691$ vs. $0,8688$) y reduce la latencia de cómputo en Qdrant en un **$44,4\%$**, demostrando que el esquema MRL permite escalar la capacidad de almacenamiento de un sistema \textit{Video-RAG} por un factor de $4\times$ sin merma apreciable en la calidad de la recuperación.
+Los resultados confirman con holgura la Hipótesis 2: la compresión del espacio latente a $d = 768$ dimensiones (reducción del $75\%$ en huella de memoria) retiene el \textbf{$98,77\%$ del \textit{Recall@1} relativo}, preserva un \textit{MRR} equivalente ($0,8691$ vs. $0,8688$; $p = 0,6729$) y reduce la latencia de cómputo en Qdrant en un \textbf{$44,4\%$}, permitiendo escalar la capacidad vectorial por un factor de $4\times$ sin merma apreciable.

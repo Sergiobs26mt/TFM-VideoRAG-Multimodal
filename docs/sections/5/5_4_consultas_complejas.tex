@@ -9,38 +9,89 @@ Las consultas multi-objetivo evalúan la capacidad del sistema para recuperar co
 \begin{table}[htbp]
 \centering
 \small
-\setlength{\tabcolsep}{4.0pt}
-\caption{Rendimiento en consultas multi-objetivo en Etapa 1 (Qdrant) y Etapa 2 (Juez Bimodal).}
+\setlength{\tabcolsep}{3.5pt}
+\caption{Rendimiento en consultas multi-objetivo ($20$ consultas, $106$ intervalos esperados, $k_1 = 10$) en Etapa 1 (Qdrant) y Etapa 2 (Juez Bimodal).}
 \label{tab:multi_target_resumen}
 \begin{adjustbox}{max width=\linewidth}
-\begin{tabular}{lcccccc}
+\begin{tabular}{lccccccc}
 \toprule
-\textbf{Corpus de Vídeo} & \begin{tabular}[c]{@{}c@{}}\textbf{Dimensión}\\\textbf{($d$)}\end{tabular} & \textbf{Intervalos} & \begin{tabular}[c]{@{}c@{}}\textbf{Recall}\\\textbf{Etapa 1}\end{tabular} & \begin{tabular}[c]{@{}c@{}}\textbf{Precisión}\\\textbf{Etapa 1}\end{tabular} & \begin{tabular}[c]{@{}c@{}}\textbf{Recall}\\\textbf{Etapa 2}\end{tabular} & \begin{tabular}[c]{@{}c@{}}\textbf{Precisión}\\\textbf{Etapa 2}\end{tabular} \\
+\textbf{Corpus de Vídeo} & \begin{tabular}[c]{@{}c@{}}\textbf{Dimensión}\\\textbf{($d$)}\end{tabular} & \textbf{Intervalos} & \begin{tabular}[c]{@{}c@{}}\textbf{Recall}\\\textbf{Etapa 1}\end{tabular} & \begin{tabular}[c]{@{}c@{}}\textbf{Precisión}\\\textbf{Etapa 1}\end{tabular} & \begin{tabular}[c]{@{}c@{}}\textbf{Recall}\\\textbf{Etapa 2}\end{tabular} & \begin{tabular}[c]{@{}c@{}}\textbf{Precisión}\\\textbf{Etapa 2}\end{tabular} & \begin{tabular}[c]{@{}c@{}}\textbf{\textit{Hit@1}}\\\textbf{Etapa 2}\end{tabular} \\
 \midrule
-\texttt{python\_tutorial.mp4} & $d = 3072$ & 48 & $85,42\%$ ($40/48$) & $45,00\%$ & $82,08\%$ ($38/48$) & $78,65\%$ \\
-\texttt{python\_tutorial.mp4} & $d = 1536$ & 48 & $87,08\%$ ($41/48$) & $47,00\%$ & $82,08\%$ ($38/48$) & $78,12\%$ \\
-\texttt{python\_tutorial.mp4} & $d = 768$  & 48 & $\mathbf{87,22\%}$ ($41/48$) & $46,00\%$ & $\mathbf{83,89\%}$ ($40/48$) & $\mathbf{80,06\%}$ \\
+\texttt{python\_tutorial.mp4} & $d = 3072$ & 48 & $85,42\%$ ($40/48$) & $45,00\%$ & $82,08\%$ ($38/48$) & $78,65\%$ & $9/10$ ($90,0\%$) \\
+\texttt{python\_tutorial.mp4} & $d = 1536$ & 48 & $87,08\%$ ($41/48$) & $\mathbf{47,00\%}$ & $82,08\%$ ($38/48$) & $78,12\%$ & $9/10$ ($90,0\%$) \\
+\texttt{python\_tutorial.mp4} & $d = 768$  & 48 & $\mathbf{87,22\%}$ ($41/48$) & $46,00\%$ & $\mathbf{83,89\%}$ ($40/48$) & $\mathbf{80,06\%}$ & $9/10$ ($90,0\%$) \\
 \midrule
-\texttt{animals.mp4} & $d = 3072$ & 58 & $\mathbf{74,89\%}$ ($42/58$) & $\mathbf{50,00\%}$ & $\mathbf{71,64\%}$ ($40/58$) & $\mathbf{96,57\%}$ \\
-\texttt{animals.mp4} & $d = 1536$ & 58 & $71,98\%$ ($40/58$) & $48,00\%$ & $68,73\%$ ($38/58$) & $96,33\%$ \\
-\texttt{animals.mp4} & $d = 768$  & 58 & $\mathbf{74,89\%}$ ($42/58$) & $\mathbf{50,00\%}$ & $\mathbf{71,64\%}$ ($40/58$) & $\mathbf{96,57\%}$ \\
+\texttt{animals.mp4} & $d = 3072$ & 58 & $\mathbf{74,89\%}$ ($42/58$) & $\mathbf{50,00\%}$ & $\mathbf{71,64\%}$ ($40/58$) & $\mathbf{96,57\%}$ & $\mathbf{10/10}$ ($\mathbf{100,0\%}$) \\
+\texttt{animals.mp4} & $d = 1536$ & 58 & $71,98\%$ ($40/58$) & $48,00\%$ & $68,73\%$ ($38/58$) & $96,33\%$ & $\mathbf{10/10}$ ($\mathbf{100,0\%}$) \\
+\texttt{animals.mp4} & $d = 768$  & 58 & $\mathbf{74,89\%}$ ($42/58$) & $\mathbf{50,00\%}$ & $\mathbf{71,64\%}$ ($40/58$) & $\mathbf{96,57\%}$ & $\mathbf{10/10}$ ($\mathbf{100,0\%}$) \\
 \bottomrule
 \end{tabular}
 \end{adjustbox}
 \end{table}
 
-En \texttt{animals.mp4}, categorías taxonómicas como \textit{``Felinos''} (4 objetivos), \textit{``Reptiles''} (2 objetivos) o \textit{``Aves''} (4 objetivos) demuestran la eficacia de la segunda etapa: la precisión media se duplica, ascendiendo del **$50,00\%$ en Etapa 1 al $96,57\%$ en Etapa 2**. Más aún, en las 10 consultas generales de animales y en las tres dimensiones evaluadas, el árbitro bimodal posiciona un acierto verdadero en el puesto número uno del ranking en el **$100,0\%$ de los casos** ($10/10$).
+El Cuadro~\ref{tab:desglose_taxonomico_animals} desglosa por categoría cada una de las $10$ consultas generales sobre \texttt{animals.mp4}, ilustrando cómo la precisión media se duplica al pasar del \textbf{$50,00\%$ en Etapa 1 al $96,57\%$ en Etapa 2} y cómo el árbitro bimodal garantiza un \textit{Hit@1} del \textbf{$100,0\%$ ($10/10$)} en las tres dimensiones.
+
+\begin{table}[htbp]
+\centering
+\small
+\setlength{\tabcolsep}{4.0pt}
+\caption{Desglose por consulta general y taxonómica sobre \texttt{animals.mp4} ($10$ consultas, $58$ intervalos temporales esperados) en Etapa 1 (E1) y Etapa 2 (E2).}
+\label{tab:desglose_taxonomico_animals}
+\begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}X c *{3}{>{\centering\arraybackslash}p{0.82cm}} *{3}{>{\centering\arraybackslash}p{0.88cm}} c}
+\toprule
+\multirow{2}{*}{\textbf{Consulta General / Taxonómica}} & \multirow{2}{*}{\textbf{Obj.}} & \multicolumn{3}{c}{\textbf{Etapa 1 (Qdrant)}} & \multicolumn{3}{c}{\textbf{Etapa 2 (Verificador)}} & \multirow{2}{*}{\textbf{Prec. E2}} \\
+\cmidrule(lr){3-5} \cmidrule(lr){6-8}
+& & \textbf{$3072$} & \textbf{$1536$} & \textbf{$768$} & \textbf{$3072$} & \textbf{$1536$} & \textbf{$768$} & \\
+\midrule
+\texttt{Felinos} & $4$ & $1/4$ & $1/4$ & $1/4$ & $1/4$ & $1/4$ & $1/4$ & $100,0\%$ \\
+\texttt{Reptiles} & $2$ & $2/2$ & $2/2$ & $2/2$ & $2/2$ & $2/2$ & $2/2$ & $100,0\%$ \\
+\texttt{Aves} & $4$ & $2/4$ & $2/4$ & $2/4$ & $2/4$ & $2/4$ & $2/4$ & $100,0\%$ \\
+\texttt{Manada o grupo $\ge 3$ animales} & $10$ & $4/10$ & $4/10$ & $4/10$ & $4/10$ & $4/10$ & $4/10$ & $100,0\%$ \\
+\texttt{Animales color blanco y negro} & $5$ & $5/5$ & $5/5$ & $5/5$ & $4/5$ & $4/5$ & $4/5$ & $100,0\%$ \\
+\texttt{Animales marinos / acuáticos} & $8$ & $6/8$ & $5/8$ & $6/8$ & $6/8$ & $5/8$ & $6/8$ & $100,0\%$ \\
+\texttt{Animales comiendo o pastando} & $8$ & $7/8$ & $7/8$ & $7/8$ & $6/8$ & $6/8$ & $6/8$ & $100,0\%$ \\
+\texttt{Crías o animales jóvenes} & $7$ & $5/7$ & $5/7$ & $5/7$ & $5/7$ & $5/7$ & $5/7$ & $80,0\%$ \\
+\texttt{Primer plano macro de ojos/orejas} & $6$ & $6/6$ & $5/6$ & $6/6$ & $6/6$ & $5/6$ & $6/6$ & $85,7\%$ \\
+\texttt{Animación 3D microscópica células} & $4$ & $4/4$ & $4/4$ & $4/4$ & $4/4$ & $4/4$ & $4/4$ & $100,0\%$ \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+El examen individual de ambas baterías revela tres propiedades clave: (1) en \texttt{animals.mp4}, $d=768$ obtiene \textbf{exactamente los mismos aciertos por categoría} que $d=3072$ con idéntica precisión media ($96,57\%$); (2) cuando la voz en \textit{off} desplaza el primer acierto en Qdrant (como \textit{``Reptiles''}, en puesto \#4 en $3072$, \#2 en $1536$ y \#5 en $768$), el árbitro bimodal reordena la ventana $K=10$ y sitúa un acierto verdadero en el puesto \#1 en el $100,0\%$ de los casos ($10/10$); y (3) en \texttt{python\_tutorial.mp4}, $d=768$ eleva la cobertura sobre estructuras de datos (\texttt{list}, \texttt{tuple}, \texttt{set}, \texttt{dict}) del $5/6$ al $100,0\%$ ($6/6$) y los rótulos sobreimpresos de $3/8$ a $4/8$.
 
 \subsubsection{Consultas Negativas de Control e Inmunidad a Falsos Positivos (Batería 3)}
 Las búsquedas aproximadas basadas en similitud del coseno devuelven obligatoriamente los $k$ candidatos con mayor producto escalar, con independencia de que el concepto consultado exista o no en el corpus.
 
-Para evaluar la capacidad de discriminación del sistema, se ejecutaron 16 consultas negativas de control en las tres dimensiones ($48$ ejecuciones y $240$ evaluaciones individuales de candidatos con \textit{Gemini 3.5 Flash Lite}):
+Para evaluar la capacidad de discriminación del sistema, se ejecutaron $16$ consultas negativas de control ($8$ sobre \texttt{python\_tutorial.mp4} y $8$ sobre \texttt{animals.mp4}) a través de las tres dimensiones MRL ($48$ ejecuciones y $240$ evaluaciones de candidatos con \textit{Gemini 3.5 Flash Lite}), cuyos resultados figuran en el Cuadro~\ref{tab:ablacion_mrl_negativas}:
 \begin{itemize}
     \item \textbf{Etapa 1 (Qdrant sin umbral):} Devuelve $240/240$ candidatos ($100\%$ de falsos positivos potenciales), dado que los fragmentos de mayor similitud superficial corresponden a planos visualmente parecidos pero temáticamente erróneos.
-    \item \textbf{Etapa 2 (Árbitro Bimodal):} Descarta el **$100,0\%$ de los candidatos** ($0/240$ falsos positivos admitidos), asignando a cada fragmento una puntuación de $0,0$ con la justificación explícita de ausencia de evidencia visual y auditiva.
+    \item \textbf{Etapa 2 (Árbitro Bimodal):} Descarta el \textbf{$100,0\%$ de los candidatos} ($0/240$ falsos positivos admitidos), asignando a cada fragmento una puntuación de $0,0$ con la justificación explícita de ausencia de evidencia visual y auditiva.
 \end{itemize}
 
-Este resultado se mantiene inalterado en $d=3072$, $d=1536$ y $d=768$, demostrando que el truncamiento dimensional no induce degradación en la especificidad del sistema.
+\begin{table}[htbp]
+\centering
+\small
+\setlength{\tabcolsep}{4.0pt}
+\caption{Evaluación de consultas negativas de control ($16$ consultas, $240$ candidatos analizados en Etapa 2) a través de las tres dimensiones MRL.}
+\label{tab:ablacion_mrl_negativas}
+\begin{tabular}{llcccc}
+\toprule
+\textbf{Corpus de Vídeo} & \textbf{Dim. ($d$)} & \textbf{Consultas} & \textbf{Candidatos E1} & \textbf{Falsos Pos. E2} & \textbf{Tasa Rechazo E2} \\
+\midrule
+\texttt{python\_tutorial.mp4} & $3072$ & $8$ & $40$ & $\mathbf{0/40}$ ($0,0\%$) & $\mathbf{100,0\%}$ ($8/8$) \\
+\texttt{python\_tutorial.mp4} & $1536$ & $8$ & $40$ & $\mathbf{0/40}$ ($0,0\%$) & $\mathbf{100,0\%}$ ($8/8$) \\
+\texttt{python\_tutorial.mp4} & $768$  & $8$ & $40$ & $\mathbf{0/40}$ ($0,0\%$) & $\mathbf{100,0\%}$ ($8/8$) \\
+\midrule
+\texttt{animals.mp4}          & $3072$ & $8$ & $40$ & $\mathbf{0/40}$ ($0,0\%$) & $\mathbf{100,0\%}$ ($8/8$) \\
+\texttt{animals.mp4}          & $1536$ & $8$ & $40$ & $\mathbf{0/40}$ ($0,0\%$) & $\mathbf{100,0\%}$ ($8/8$) \\
+\texttt{animals.mp4}          & $768$  & $8$ & $40$ & $\mathbf{0/40}$ ($0,0\%$) & $\mathbf{100,0\%}$ ($8/8$) \\
+\midrule
+\textbf{Total Global (3 dim.)} & \textbf{Todas} & $\mathbf{48\text{ ejec.}}$ & $\mathbf{240}$ & $\mathbf{0/240}$ ($\mathbf{0,0\%}$) & $\mathbf{100,0\%}$ ($\mathbf{48/48}$) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Este resultado confirma que el truncamiento dimensional ($3072 \to 1536 \to 768$) no induce colapso semántico ni degrada la especificidad del verificador bimodal.
 
 \subsubsection{Validación Cuantitativa de la Hipótesis 3 ($H_3$)}
 La Hipótesis 3 queda confirmada empíricamente: la verificación bimodal con un modelo de lenguaje multimodal erradica por completo los falsos positivos derivados de la similitud del coseno (tasa de rechazo del $100,0\%$) y eleva la precisión en consultas generales complejas por encima del $96\%$.

@@ -87,7 +87,7 @@ La Figura~\ref{fig:fixed_vs_adaptive_videorac} contrasta el efecto destructivo d
 Dentro del ámbito de los vídeos educativos, académicos y tutoriales técnicos, la arquitectura \textbf{Video-RAC (\textit{Retrieval Adaptive Chunking})} se ha consolidado como el estándar metodológico de referencia \cite{video_rac2025}. %[cite: 3, 5]
 \textit{Video-RAC} abandona las particiones estáticas en favor de un criterio híbrido que evalúa cada transición temporal combinando la similitud del coseno de \textit{embeddings} visuales ligeros generados por CLIP con el Índice de Similitud Estructural (SSIM) \cite{video_rac2025}. %[cite: 3, 5]
 
-Específicamente, la formulación teórica de \textit{Video-RAC} emplea el modelo \texttt{openai/clip-vit-base-patch32} para extraer representaciones rápidas de los fotogramas consecutivos $F_t$ y $F_{t+1}$, ponderando su similitud semántica con la similitud estructural según la Ecuación~\eqref{eq:videorac_hibrido} mediante un factor de balance $\alpha = 0,6$ \cite{video_rac2025}: %[cite: 5]
+Específicamente, la formulación teórica de \textit{Video-RAC} emplea el modelo \texttt{openai/clip-vit-base-patch32} \cite{radford2021clip} para extraer representaciones rápidas de los fotogramas consecutivos $F_t$ y $F_{t+1}$, ponderando su similitud semántica con la similitud estructural SSIM \cite{wang2004ssim} según la Ecuación~\eqref{eq:videorac_hibrido} mediante un factor de balance $\alpha = 0,6$ \cite{video_rac2025}: %[cite: 5]
 
 \begin{equation}
 S_{\text{híbrida}}(F_t, F_{t+1}) = \alpha \cdot \cos\!\left(\mathbf{e}_{\text{CLIP}}(F_t), \, \mathbf{e}_{\text{CLIP}}(F_{t+1})\right) + (1 - \alpha) \cdot \text{SSIM}(F_t, F_{t+1})
@@ -96,7 +96,7 @@ S_{\text{híbrida}}(F_t, F_{t+1}) = \alpha \cdot \cos\!\left(\mathbf{e}_{\text{C
 
 Los hiperparámetros canónicos reportados en la literatura para determinar dónde concluye una unidad semántica y comienza la siguiente estipulan un factor de balance $\alpha = 0,6$, un umbral de similitud de \textit{embeddings} CLIP de $\tau_{\text{CLIP}} = 0,85$ y un umbral estructural de $\tau_{\text{SSIM}} = 0,80$ \cite{video_rac2025}. %[cite: 5]
 
-En implementaciones de producción optimizadas para ejecutarse localmente en CPU sin requerir la carga de pesos adicionales de CLIP durante el preprocesamiento (tal y como se implementa en el módulo \texttt{src/processing/video\_chunker.py}), la detección de límites de plano se resuelve directamente mediante la formulación matemática exacta del \textbf{Índice de Similitud Estructural (SSIM)} con ventana Gaussiana en OpenCV. %[cite: 3]
+En implementaciones de producción optimizadas para ejecutarse localmente en CPU sin requerir la carga de pesos adicionales de CLIP durante el preprocesamiento (tal y como adopta nuestro prototipo en el módulo \texttt{src/processing/video\_chunker.py}), la detección de límites de plano se resuelve directamente mediante la formulación matemática del \textbf{Índice de Similitud Estructural (SSIM)} \cite{wang2004ssim} con ventana Gaussiana en OpenCV (\texttt{compute\_ssim} dentro de \texttt{process\_video\_single\_pass}). %[cite: 3]
 Dados dos fotogramas consecutivos convertidos a escala de grises y redimensionados a un ancho de análisis rápido (\texttt{resize\_width = 160} píxeles para la fase de corte), representados como matrices en coma flotante de doble precisión $a, b \in \mathbb{R}^{H \times W}$ (\texttt{np.float64}), el algoritmo aplica un filtro de desenfoque Gaussiano bidimensional \texttt{cv2.GaussianBlur} con tamaño de núcleo impar $K \times K$ (\texttt{window\_size = 7}) y desviación estándar $\sigma = 1,5$ para obtener las medias locales $\mu_a, \mu_b$ definidas en la Ecuación~\eqref{eq:ssim_medias_locales}: %[cite: 3]
 
 \begin{equation}
@@ -122,9 +122,9 @@ Con estas matrices estadísticas e introduciendo las constantes de estabilidad n
 \label{eq:ssim_mapa_y_media}
 \end{equation} %[cite: 3]
 
-Cuando el valor escalar $\overline{\text{SSIM}}(a, b)$ cae por debajo del umbral configurado (\texttt{threshold}, calibrado entre $0,50$ y $0,80$) y el número de fotogramas acumulados desde el corte anterior iguala o supera el mínimo permitido (\texttt{min\_shot\_frames = 12} a $45$ fotogramas para filtrar destellos luminosos espurios), la función \texttt{detect\_shot\_boundaries} consolida e instancia un objeto inmutable \texttt{VideoChunk(index, start\_frame, end\_frame, start\_time, end\_time)}. %[cite: 3]
+Cuando el valor escalar $\overline{\text{SSIM}}(a, b)$ cae por debajo del umbral configurado (\texttt{threshold}, con valor por defecto $0,50$ en \texttt{ChunkingConfig} y calibrado entre $0,50$ y $0,60$ en evaluación) y el número de fotogramas acumulados desde el corte anterior iguala o supera el mínimo permitido (\texttt{min\_shot\_frames = 12} para filtrar destellos luminosos espurios) - o se alcanza la duración máxima \texttt{max\_shot\_duration} ($8,0\text{ s}$ por defecto) -, la función \texttt{process\_video\_single\_pass} consolida e instancia un objeto inmutable \texttt{VideoChunk(index, start\_frame, end\_frame, start\_time, end\_time)}. %[cite: 3]
 
-La Figura~\ref{fig:pipeline_ssim_opencv} detalla este flujo de cálculo matricial implementado en \texttt{compute\_ssim} y \texttt{detect\_shot\_boundaries}. %[cite: 3]
+La Figura~\ref{fig:pipeline_ssim_opencv} detalla este flujo de cálculo matricial implementado en \texttt{compute\_ssim} y \texttt{process\_video\_single\_pass}. %[cite: 3]
 
 \begin{figure}[htbp]
 \centering
@@ -168,7 +168,7 @@ La Figura~\ref{fig:pipeline_ssim_opencv} detalla este flujo de cálculo matricia
 \draw[arrow, dashed, draw=blue!70!black] (cont.west) -| (frames.south) 
     node[pos=0.75, left=3pt, font=\tiny\bfseries, blue!80!black] {Siguiente par};
 \end{tikzpicture}
-\caption{Flujo algorítmico del cálculo del Índice de Similitud Estructural (SSIM) mediante filtrado Gaussiano en OpenCV (\texttt{compute\_ssim}) y criterio de consolidación de objetos \texttt{VideoChunk} en \texttt{detect\_shot\_boundaries}.} %[cite: 3]
+\caption{Flujo algorítmico del cálculo del Índice de Similitud Estructural (SSIM \cite{wang2004ssim}) mediante filtrado Gaussiano en OpenCV (\texttt{compute\_ssim}) y criterio de consolidación de objetos \texttt{VideoChunk} en \texttt{process\_video\_single\_pass}.} %[cite: 3]
 \label{fig:pipeline_ssim_opencv}
 \end{figure}
 
@@ -229,24 +229,23 @@ La Figura~\ref{fig:seleccion_entropia_shannon} ilustra la evolución de la curva
 \label{subsubsec:alineacion_forzada_audio}
 
 En paralelo a la segmentación visual, la dimensión auditiva exige una ingeniería de fragmentación igualmente rigurosa \cite{mixpeek_chunking, whisperx_silero}. %[cite: 4, 5]
-El estado del arte descarta por completo las transcripciones planas carentes de marcas de tiempo y establece una canalización acústica en cuatro etapas implementada en torno al módulo \texttt{src/processing/audio\_transcriber.py} \cite{mixpeek_chunking, whisperx_silero}: %[cite: 3, 4, 5]
+El marco teórico del estado del arte descarta las transcripciones planas carentes de marcas temporales y propone una canalización acústica completa en cuatro etapas \cite{mixpeek_chunking, whisperx_silero}: %[cite: 3, 4, 5]
 
 \begin{enumerate}
-    \item \textbf{Extracción de Pista Acústica:} A partir del contenedor de vídeo original (\texttt{.mp4}), se desmultiplexa la señal de audio hacia un archivo temporal sin compresión o de alta fidelidad (\texttt{.wav} o \texttt{.mp3}) empleando herramientas de bajo nivel como \texttt{ffmpeg} o \texttt{moviepy} ejecutadas de forma no bloqueante (\texttt{asyncio.to\_thread}). %[cite: 3, 4]
-    \item \textbf{Detección de Actividad de Voz (\textit{Voice Activity Detection} - Silero VAD):} Antes de invocar al modelo de transcripción, el flujo de audio se filtra mediante redes ultraligeras de detección de voz como \textbf{Silero VAD}, la cual cuenta con aproximadamente \textbf{un millón de parámetros} y ofrece una ejecución ultrarrápida en CPU para aislar los segmentos de discurso humano respecto del silencio y del ruido ambiental, evitando alucinaciones fonéticas del modelo ASR durante pausas acústicas \cite{whisperx_silero, mixpeek_chunking}. %[cite: 5]
-    \item \textbf{Transcripción Fonética, Alineación Forzada (\textit{WhisperX}) y Diarización:} Los segmentos con voz activa se procesan mediante motores de reconocimiento avanzado como \textbf{Whisper}, acoplados a algoritmos de \textbf{alineación forzada} como \textbf{WhisperX} o \textbf{Montreal Forced Aligner} \cite{whisperx_silero, mixpeek_chunking}. %[cite: 4, 5]
-    Este acoplamiento genera transcripciones con precisión a nivel de palabra y fonema, vinculando cada término exacto con su marca de tiempo en milisegundos $[t_{\text{ini}}^{\text{aud}}, t_{\text{fin}}^{\text{aud}}]$, mientras que la etapa de \textbf{diarización de hablantes} etiqueta acústicamente cada bloque textual con la identidad del interlocutor \cite{mixpeek_chunking}. %[cite: 5]
-    \item \textbf{Superposición y Acoplamiento con \texttt{VideoChunk} (\texttt{align\_transcript\_with\_chunks}):} Finalmente, los segmentos transcritos se proyectan sobre los intervalos temporales $[t_{\text{start}}^{(i)}, t_{\text{end}}^{(i)}]$ de los objetos \texttt{VideoChunk} generados previamente por la etapa visual (CLIP/SSIM) \cite{mixpeek_chunking}. %[cite: 3, 4, 5]
+    \item \textbf{Extracción de Pista Acústica:} A partir del contenedor de vídeo original (\texttt{.mp4}), se desmultiplexa y remuestrea la señal de audio a $16\text{ kHz}$ en PCM monocanal empleando herramientas como \texttt{ffmpeg} ejecutadas de forma no bloqueante (\texttt{asyncio.to\_thread}). %[cite: 3, 4]
+    \item \textbf{Detección de Actividad de Voz (\textit{Voice Activity Detection} - Silero VAD, marco de referencia):} En la literatura avanzada de preprocesamiento acústico, el flujo de audio suele filtrarse previamente mediante redes ultraligeras como \textbf{Silero VAD} ($\sim 10^6$ parámetros) para aislar el discurso humano respecto del silencio y del ruido ambiental, mitigando alucinaciones en pausas largas \cite{whisperx_silero, mixpeek_chunking}. %[cite: 5]
+    \item \textbf{Transcripción Fonética (\textit{Whisper}), Alineación Forzada (\textit{WhisperX}) y Diarización:} Los segmentos hablados se transcriben mediante modelos fundacionales como \textbf{OpenAI Whisper} \cite{radford2023whisper}. En su vertiente extendida descrita en la literatura (\textit{WhisperX} o \textit{Montreal Forced Aligner}), el flujo añade alineación fonética forzada palabra a palabra en milisegundos y diarización de hablantes para etiquetar cada intervención \cite{whisperx_silero, mixpeek_chunking}. %[cite: 4, 5]
+    \item \textbf{Superposición y Acoplamiento con \texttt{VideoChunk} (\texttt{align\_transcript\_with\_chunks}):} Finalmente, los segmentos transcritos se proyectan sobre los intervalos temporales $[t_{\text{start}}^{(i)}, t_{\text{end}}^{(i)}]$ de los objetos \texttt{VideoChunk} generados previamente por la etapa visual \cite{mixpeek_chunking}. %[cite: 3, 4, 5]
 \end{enumerate}
 
-Formalmente, dado un \texttt{VideoChunk} visual $C_i$ con intervalo $[t_{\text{start}}^{(i)}, t_{\text{end}}^{(i)}]$ y una lista de segmentos de transcripción auditiva $S_j = (\tau_{\text{ini}}^{(j)}, \tau_{\text{fin}}^{(j)}, \text{texto}_j)$, la condición matemática de intersección temporal $\Delta \tau_{i,j}$ que determina la asignación o concatenación del texto en el atributo \texttt{VideoChunk.transcript} se define mediante la Ecuación~\eqref{eq:solapamiento_audio_video}: %[cite: 3, 4]
+Conviene matizar explícitamente la frontera entre dicho marco teórico y la implementación real del prototipo desarrollada en \texttt{src/processing/audio\_transcriber.py}. Para preservar un presupuesto de memoria unificada estricto ($16\text{ GB}$ compartidos entre Whisper y los modelos visuales locales), el prototipo prescinde de las etapas adicionales de Silero VAD y diarización externa e implementa la ruta directa \texttt{ffmpeg} ($16\text{ kHz}$ mono PCM) $\to$ \texttt{openai-whisper} (variante \texttt{base} \cite{radford2023whisper}) $\to$ \texttt{align\_transcript\_with\_chunks}, descargando inmediatamente los pesos acústicos tras concluir la transcripción (\texttt{unload\_whisper\_models}). Dado un \texttt{VideoChunk} visual $C_i = [t_{\text{start}}^{(i)}, t_{\text{end}}^{(i)}]$ y un segmento de Whisper $S_j = (\tau_{\text{ini}}^{(j)}, \tau_{\text{fin}}^{(j)}, \text{texto}_j)$, el prototipo vincula la locución mediante la condición de solapamiento mínimo $\Delta \tau_{i,j} \ge \Delta_{\min} = 0,2\text{ s}$ formulada en la Ecuación~\eqref{eq:solapamiento_audio_video}: %[cite: 3, 4]
 
 \begin{equation}
-\Delta \tau_{i,j} = \max\!\left(0, \, \min\!\left(t_{\text{end}}^{(i)}, \, \tau_{\text{fin}}^{(j)}\right) - \max\!\left(t_{\text{start}}^{(i)}, \, \tau_{\text{ini}}^{(j)}\right)\right) > 0
+\Delta \tau_{i,j} = \max\!\left(0, \, \min\!\left(t_{\text{end}}^{(i)}, \, \tau_{\text{fin}}^{(j)}\right) - \max\!\left(t_{\text{start}}^{(i)}, \, \tau_{\text{ini}}^{(j)}\right)\right) \ge \Delta_{\min} = 0,2\text{ s}
 \label{eq:solapamiento_audio_video}
 \end{equation} %[cite: 3, 4]
 
-La Figura~\ref{fig:alineacion_forzada_audio_video} muestra la arquitectura completa de esta canalización paralela visual y auditiva, garantizando que al recuperar un fragmento el sistema disponga simultáneamente de los fotogramas clave, la transcripción exacta pronunciada en ese segundo y la identidad del hablante \cite{mixpeek_chunking}. %[cite: 3, 4, 5]
+La Figura~\ref{fig:alineacion_forzada_audio_video} muestra la arquitectura paralela implementada en el sistema frente a las extensiones avanzadas de la literatura (Silero VAD y WhisperX/diarización), y el Cuadro~\ref{tab:parametros_chunking_audio} sintetiza los hiperparámetros de referencia junto con los adoptados por el prototipo. %[cite: 3, 4, 5]
 
 \begin{figure}[htbp]
 \centering
@@ -261,19 +260,19 @@ La Figura~\ref{fig:alineacion_forzada_audio_video} muestra la arquitectura compl
 \node[srcnode] (mp4) at (-6.4, 0.0) {Vídeo Crudo\\[2pt]{\normalfont\scriptsize \texttt{video.mp4}}};
 
 % Rama Superior: Canal Visual
-\node[visnode] (ssim) at (-2.7, 1.05) {\textbf{Rama Visual}\\[2pt]{\scriptsize Límites CLIP + SSIM\\[1pt](\texttt{video\_chunker})}};
-\node[visnode] (ent) at (1.1, 1.05) {\textbf{Keyframes Shannon}\\[2pt]{\scriptsize 3 fotogramas clave\\[1pt]$[F_{\text{ini}}, F_{f^*}, F_{\text{fin}}]$}};
+\node[visnode] (ssim) at (-2.7, 1.05) {\textbf{Rama Visual (Prototipo)}\\[2pt]{\scriptsize SSIM + Cota Máx.\\[1pt](\texttt{video\_chunker})}};
+\node[visnode] (ent) at (1.1, 1.05) {\textbf{Keyframes Shannon}\\[2pt]{\scriptsize 3 fotogramas tercios\\[1pt]$\arg\max H(F_t)$}};
 
 % Rama Inferior: Canal Auditivo
-\node[audnode] (vad) at (-2.7, -1.05) {\textbf{Rama Audio}\\[2pt]{\scriptsize \texttt{ffmpeg} $\to$ \textbf{Silero VAD}\\[1pt](\texttt{audio\_transcriber})}};
-\node[audnode] (whisp) at (1.1, -1.05) {\textbf{Whisper + WhisperX}\\[2pt]{\scriptsize Alineación forzada (ms)\\[1pt]+ Diarización hablantes}};
+\node[audnode] (vad) at (-2.7, -1.05) {\textbf{Rama Audio (Prototipo)}\\[2pt]{\scriptsize \texttt{ffmpeg} PCM $16\text{ kHz}$\\[1pt](\texttt{audio\_transcriber})}};
+\node[audnode] (whisp) at (1.1, -1.05) {\textbf{Whisper \texttt{base} (CPU)}\\[2pt]{\scriptsize Segmentos temporales\\[1pt](Ext. lit.: Silero/WhisperX)}};
 
 % Nodo de Fusión / Alineación Temporal
 \node[alignbox] (out) at (5.5, 0.0) {\textbf{Alineación Cruzada}\\[1pt]{\normalfont\tiny (\texttt{align\_transcript\_with\_chunks})}\\[4pt]
 {\normalfont\scriptsize \textbf{\texttt{VideoChunk} Enriquecido}:}\\[2pt]
 {\normalfont\tiny $\bullet$ Intervalo $[t_{\text{start}}, t_{\text{end}}]$\\[1pt]
 $\bullet$ 3 Fotogramas Clave\\[1pt]
-$\bullet$ \texttt{transcript: str} + Hablante}};
+$\bullet$ \texttt{transcript} ($\Delta \tau \ge 0,2\text{ s}$)}};
 
 \draw[arrow, blue!80!black] (mp4.east) |- (ssim.west);
 \draw[arrow, blue!80!black] (ssim.east) -- (ent.west);
@@ -283,29 +282,29 @@ $\bullet$ \texttt{transcript: str} + Hablante}};
 \draw[arrow, purple!80!black] (vad.east) -- (whisp.west);
 \draw[arrow, purple!80!black, very thick] (whisp.east) -- (out.west |- whisp.east);
 \end{tikzpicture}
-\caption{Arquitectura de procesamiento paralelo y alineación forzada intermodal: la rama visual segmenta el vídeo mediante CLIP/SSIM y extrae tres fotogramas por entropía de Shannon, mientras la rama auditiva filtra silencios con Silero VAD y alinea las marcas de tiempo de WhisperX sobre cada \texttt{VideoChunk} \cite{video_rac2025, whisperx_silero, mixpeek_chunking}.} %[cite: 3, 4, 5]
+\caption{Arquitectura de procesamiento paralelo y alineación forzada intermodal implementada en el prototipo (\texttt{video\_chunker.py} + \texttt{audio\_transcriber.py} con \texttt{ffmpeg} y Whisper \texttt{base} \cite{radford2023whisper}), mostrando las extensiones opcionales descritas en la literatura (CLIP híbrido, Silero VAD y WhisperX \cite{video_rac2025, whisperx_silero, mixpeek_chunking}).} %[cite: 3, 4, 5]
 \label{fig:alineacion_forzada_audio_video}
 \end{figure}
 
-El Cuadro~\ref{tab:parametros_chunking_audio} resume todos los parámetros matemáticos y algorítmicos que gobiernan las etapas de fragmentación visual y alineación auditiva descritas en esta sección. %[cite: 3, 4, 5]
+El Cuadro~\ref{tab:parametros_chunking_audio} distingue los parámetros teóricos reportados en el estado del arte frente a los adoptados operativamente por el prototipo. %[cite: 3, 4, 5]
 
 \begin{table}[htbp]
 \centering
 \small
 \setlength{\tabcolsep}{4.0pt}
-\caption{Especificaciones técnicas de la estrategia de fragmentación semántica adaptativa (\textit{Video-RAC}) y alineación forzada de audio \cite{video_rac2025, whisperx_silero, mixpeek_chunking}.} %[cite: 3, 4, 5]
+\caption{Comparativa de parámetros entre la literatura de referencia (\textit{Video-RAC}, Silero VAD/WhisperX) y el prototipo implementado \cite{video_rac2025, whisperx_silero, mixpeek_chunking, wang2004ssim, radford2023whisper}.} %[cite: 3, 4, 5]
 \label{tab:parametros_chunking_audio}
 \begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}p{3.4cm} >{\raggedright\arraybackslash}p{3.8cm} >{\raggedright\arraybackslash}p{3.0cm} >{\raggedright\arraybackslash}X}
 \toprule
-\textbf{Parámetro} & \textbf{Modelo / Algoritmo} & \textbf{Valor Referencia} & \textbf{Función en el Pipeline} \\
+\textbf{Parámetro} & \textbf{Modelo / Algoritmo} & \textbf{Valor Referencia} & \textbf{Función / Adopción en Prototipo} \\
 \midrule
-Codificador visual híbrido & \texttt{clip-vit-base-patch32} & $\alpha = 0,6$, $\tau = 0,85$ & Similitud semántica entre planos (\textit{Video-RAC}) \\
-Índice estructural local & SSIM Gaussiano (OpenCV) & $\tau_{\text{SSIM}} = 0,80$ & Detección bordes de plano ($K=7, \, \sigma=1,5$) \\
+Codificador visual híbrido & CLIP + SSIM (Lit. \textit{Video-RAC} \cite{radford2021clip, video_rac2025}) & $\alpha = 0,6$, $\tau_{\text{CLIP}} = 0,85$ & Marco teórico (omitido en prototipo local para ahorrar RAM) \\
+Índice estructural local & SSIM Gaussiano \cite{wang2004ssim} (OpenCV) & $\theta_{\text{SSIM}} = 0,50$ ($0,60$ Py.) & Implementado en CPU ($K=7, \, \sigma=1,5$) \\
 Constantes de estabilidad & Rango dinámico $L = 255$ & $C_1=6,50, \, C_2=58,52$ & Evita división por cero en zonas oscuras \\
-Filtro de planos espurios & \texttt{min\_shot\_frames} & $12$ a $45$ frames & Descarta parpadeos menores a $0,5\text{-}1,5\text{ s}$ \\
-Muestreo de fotogramas & Entropía Shannon $H(F_t)$ & $3$ fotogramas & Máxima densidad visual por \texttt{VideoChunk} \\
-Detección de voz activa & Silero VAD (CPU) & $\sim 10^6$ parámetros & Aísla discurso humano de silencio y ruido \\
-Alineación y diarización & Whisper + WhisperX / MFA & Precisión milisegundos & Anclaje palabra a palabra e identidad hablante \\
+Filtro y cota de planos & \texttt{min\_shot\_frames} / $T_{\max}$ & $12$ fr. / $8,0\text{ s}$ ($5,0\text{ s}$ Py.) & Implementado en \texttt{ChunkingConfig} \\
+Muestreo de fotogramas & Entropía Shannon $H(F_t)$ & $3$ fotogramas (tercios) & Máxima densidad visual excluyendo bordes ($10\%$) \\
+Detección voz (Lit.) & Silero VAD (CPU) \cite{whisperx_silero} & $\sim 10^6$ parámetros & Marco teórico (no usado en prototipo) \\
+Transcripción y anclaje & Whisper \texttt{base} \cite{radford2023whisper} / Lit. WhisperX & $\Delta_{\min} = 0,2\text{ s}$ (Prototipo) & \texttt{ffmpeg} $16\text{ kHz}$ + Whisper \texttt{base} + solape \\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -331,8 +330,8 @@ El contraste arquitectónico y matemático entre este enfoque de ventana fija y 
     Nuestro \textit{pipeline} resuelve nativamente ambos problemas mediante la detección de límites de plano basada en el Índice de Similitud Estructural con filtro Gaussiano $7 \times 7$ ($\sigma = 1,5$) sobre OpenCV (\texttt{detect\_shot\_boundaries}) y el cálculo exacto de la densidad de información mediante la Entropía de Shannon sobre el histograma de intensidades (\texttt{cv2.calcHist}), acotado por \texttt{max\_shot\_frames} para impedir la dilución semántica en planos estáticos de programación \cite{video_rac2025}. %[cite: 1, 2]
 
     \item \textbf{Explicación teórica y empírica de la distribución de similitud del coseno en consultas específicas:}
-    Los estudios sobre \textit{Gemini Embedding 2} y \textit{Qwen3-VL-Embedding} prueban que las consultas de alta especificidad visual o sintáctica producen puntuaciones de similitud del coseno inferiores al umbral genérico de $0,41$ (rango verificado $0,28\text{--}0,39$) \cite{sentrysearch2026}. %[cite: 1, 2]
-    Esto fundamenta lo observado en la validación sobre \texttt{python\_tutorial.mp4} para la consulta \texttt{"Bucles while"}: una portada gráfica con el título \textit{``Bucles''} alcanza similitud $\mathbf{0,4315}$ (\texttt{Chunk 36}, Rango \#1), mientras que el fragmento con código real (\texttt{while index < 5:} en $t = 231,0\text{ s}$, \texttt{Chunk 38}) obtiene $\mathbf{0,3893}$ (Rango \#7). %
+    De acuerdo con el fenómeno de \textit{Modality Gap} analizado en la Subsección~\ref{subsubsec:infonce_modality_gap} \cite{liang2022modalitygap}, los estudios sobre \textit{Gemini Embedding 2} y \textit{Qwen3-VL-Embedding} confirman que las consultas cruzadas de alta especificidad visual o sintáctica arrojan similitudes del coseno acotadas por debajo de $0,50$ (típicamente $0,28\text{--}0,39$ en parejas específicas) \cite{sentrysearch2026}. %[cite: 1, 2]
+    Esto fundamenta lo observado posteriormente en el Capítulo~5 sobre \texttt{python\_tutorial.mp4} para la consulta \texttt{"Bucles while"}: una portada gráfica con el título \textit{``Bucles''} alcanza similitud $\mathbf{0,4315}$ (\texttt{Chunk 36}, Rango \#1), mientras que el fragmento con código real (\texttt{while index < 5:} en $t = 231,0\text{ s}$) obtiene $\mathbf{0,3893}$ (Rango \#7). %
 
     \newpage
     \item \textbf{Necesidad de deduplicación inter-chunk (\textit{Deduplication}) y sobremuestreo antes del \textit{Reranking}:}
@@ -396,7 +395,7 @@ Representación visual enviada a API & Vídeo completo tokenizado a $1\text{ FPS
 Integración del canal auditivo & Sin alineación explícita de transcripción & Transcripción alineada fusionada en \texttt{Content} y \textit{Payload} \\ \addlinespace[2pt]
 Fotogramas facturados ($1\text{ h}$ vídeo) & $4.315\text{ frames/h}$ ($\approx \$3{,}41\text{/h}$ en Gemini API) & $\sim 432\text{ frames/h}$ ($\mathbf{-89,98\%}$ carga visual) \\ \addlinespace[2pt]
 Motor de almacenamiento vectorial & ChromaDB local (colecciones separadas) & Qdrant (\texttt{PointStruct}, HNSW, UUIDv5 idempotente) \\ \addlinespace[2pt]
-Refinamiento de Segunda Etapa & VLM sobre clip recortado + \texttt{--dedupe 0.9} & \textit{Gemini 3.5 Flash Lite} Bimodal ($2$ frames + texto) + Fallback \\
+Refinamiento de Segunda Etapa & VLM sobre clip recortado + \texttt{-{}-dedupe 0.9} & \textit{Gemini 3.5 Flash Lite} Bimodal ($2$ frames + texto) + Fallback \\
 \bottomrule
 \end{tabularx}
 \end{table}

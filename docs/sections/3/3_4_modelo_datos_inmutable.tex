@@ -48,7 +48,7 @@ Para asegurar la total reproducibilidad de cada ejecución experimental, se dise
 
 \begin{enumerate}
     \item \textbf{\texttt{run\_metadata.json}:} Registra los metadatos de entorno (marca temporal ISO-8601, versión del sistema, identificador único de ejecución, plataforma hardware y latencias acumuladas).
-    \item \textbf{\texttt{config.json}:} Almacena la fotografía exacta de todos los hiperparámetros operativos: modelo de vectorización (\texttt{gemini-embedding-2-preview}), dimensionalidad seleccionada $d \in \mathcal{D}_{\text{MRL}}$, calidad de codificación JPEG, umbral de similitud SSIM, modelo de reranker (\texttt{gemini-3.5-flash-lite}) y factor de sobremuestreo $k_1$.
+    \item \textbf{\texttt{config.json}:} Almacena la fotografía exacta de todos los hiperparámetros operativos: backend de vectorización (\texttt{gemini}, \texttt{qwen3-vl-2b} o \texttt{gemma2}), identificador del modelo subyacente (\texttt{gemini-embedding-2-preview}, \texttt{Qwen/Qwen3-VL-Embedding-2B} o \texttt{google/embeddinggemma-2}), dimensionalidad seleccionada $d \in \mathcal{D}_{\text{MRL}}(b)$, calidad de codificación JPEG, umbral de similitud SSIM, modelo de reranker (\texttt{gemini-3.5-flash-lite}) y factor de sobremuestreo $k_1$.
     \item \textbf{\texttt{search\_results.json}:} Archiva la traza completa de cada consulta ejecutada: vector de consulta emitido, lista íntegra de candidatos recuperados en la Etapa 1 con sus puntuaciones de coseno, y evaluaciones individuales de la Etapa 2 con los juicios booleanos, puntuaciones y justificaciones textuales.
 \end{enumerate}
 

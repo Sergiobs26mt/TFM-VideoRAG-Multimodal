@@ -4,7 +4,7 @@
 La búsqueda sobre grandes colecciones de vídeo enfrenta una disyuntiva clásica entre latencia y precisión: la comparación exhaustiva mediante modelos de visión-lenguaje de alta capacidad resulta computacionalmente inviable en tiempo real, mientras que la recuperación densa basada exclusivamente en similitud del coseno puede verse afectada por coincidencias superficiales y falsos positivos \cite{video_rag2024, eval_mrag2025}. Para resolver este dilema, el sistema adopta una arquitectura en dos etapas jerárquicas: recuperación aproximada de alta cobertura (Etapa 1) y verificación bimodal estructurada (Etapa 2).
 
 \subsubsection{Etapa 1: Recuperación Densa y Deduplicación Temporal}
-La consulta multimodal $\mathcal{Q}$ emitida por el usuario es vectorizada en un embedding unitario $\mathbf{q}^{(d)} \in \mathbb{S}^{d-1}$ a la resolución dimensional seleccionada $d$. A continuación, el motor de búsqueda vectorial local \textit{Qdrant} ejecuta una búsqueda de vecinos más cercanos basada en el índice jerárquico de grafos navegables de mundo pequeño (HNSW) con función de distancia coseno:
+La consulta multimodal $\mathcal{Q}$ emitida por el usuario es vectorizada en un embedding unitario $\mathbf{q}^{(d)} \in \mathbb{S}^{d-1}$ a la resolución dimensional seleccionada $d$. A continuación, el motor de búsqueda vectorial local \textit{Qdrant} ejecuta una búsqueda de vecinos más cercanos basada en el índice jerárquico de grafos navegables de mundo pequeño (HNSW) \cite{malkov2020hnsw} con función de distancia coseno:
 \begin{equation}
     \mathcal{C}_{\text{raw}} = \text{Top-}k_1 \left( \{ (C_i, S_d(\mathbf{q}, \mathbf{v}_i)) \}_{i=1}^N \right)
 \end{equation}

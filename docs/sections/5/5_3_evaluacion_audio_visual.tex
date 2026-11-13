@@ -4,39 +4,162 @@
 Esta subsección aborda directamente la Pregunta de Investigación 1 (\textbf{RQ1}) y la Hipótesis 1 ($H_1$), evaluando el beneficio de la fusión temprana de la pista de voz alineada frente a la línea base puramente visual, así como el papel corrector del juez bimodal de segunda etapa.
 
 \subsubsection{Comparativa de Rendimiento: Línea Base Visual frente a Fusión Bimodal}
-El Cuadro~\ref{tab:ablacion_visual_vs_audio_consolidado} expone las métricas comparativas entre la arquitectura puramente visual (3 fotogramas clave por plano) y la arquitectura bimodal completa (3 fotogramas + transcripción Whisper alineada + verificación bimodal con \textit{Gemini 3.5 Flash Lite}) en los dos dominios audiovisuales evaluados.
+El Cuadro~\ref{tab:ablacion_visual_vs_audio_consolidado} expone las métricas comparativas entre la arquitectura puramente visual ($3$ fotogramas clave por plano) y la arquitectura bimodal completa ($3$ fotogramas + transcripción Whisper alineada + verificación bimodal con \textit{Gemini 3.5 Flash Lite}) en los dos dominios audiovisuales evaluados \cite{gemini_emb2_docs, video_rac2025}.
 
 \begin{table}[htbp]
 \centering
 \small
 \setlength{\tabcolsep}{4.0pt}
-\caption{Comparativa empírica entre la arquitectura puramente visual y la canalización bimodal con fusión temprana de audio y verificación en dos etapas.}
+\caption{Comparativa empírica entre la arquitectura puramente visual y la canalización bimodal con fusión temprana de audio (\textit{Whisper}) y verificación en dos etapas.}
 \label{tab:ablacion_visual_vs_audio_consolidado}
+\begin{adjustbox}{max width=\linewidth}
 \begin{tabular}{lllccc}
 \toprule
-\textbf{Corpus de Vídeo} & \textbf{Etapa del Sistema} & \textbf{Métrica de IR} & \textbf{Línea Base Visual} & \textbf{Fusión Bimodal} & \textbf{Variación} \\
+\textbf{Corpus de Vídeo} & \textbf{Etapa / Batería} & \textbf{Métrica de IR} & \textbf{Línea Base Visual} & \textbf{Fusión Bimodal} & \textbf{Variación} \\
 \midrule
 \texttt{python\_tutorial.mp4} & Etapa 1 (Qdrant) & \textit{Recall@1} & $67,9\%$ ($38/56$) & $\mathbf{85,7\%}$ ($48/56$) & $\mathbf{+17,8\text{ pp}}$ \\
 \texttt{python\_tutorial.mp4} & Etapa 1 (Qdrant) & \textit{Recall@3} & $87,5\%$ ($49/56$) & $\mathbf{92,9\%}$ ($52/56$) & $\mathbf{+5,4\text{ pp}}$ \\
+\texttt{python\_tutorial.mp4} & Etapa 1 (Qdrant) & \textit{Recall@5} & $91,1\%$ ($51/56$) & $\mathbf{94,6\%}$ ($53/56$) & $\mathbf{+3,5\text{ pp}}$ \\
 \texttt{python\_tutorial.mp4} & Etapa 1 (Qdrant) & \textit{MRR} & $0,779$ & $\mathbf{0,897}$ & $\mathbf{+0,118}$ \\ \addlinespace[2.5pt]
 \texttt{python\_tutorial.mp4} & Etapa 2 (Juez Bimodal) & \textit{Recall@1} & $80,4\%$ ($45/56$) & $\mathbf{89,3\%}$ ($50/56$) & $\mathbf{+8,9\text{ pp}}$ \\
-\texttt{python\_tutorial.mp4} & Etapa 2 (Juez Bimodal) & \textit{MRR} & $0,848$ & $\mathbf{0,911}$ & $\mathbf{+0,063}$ \\
+\texttt{python\_tutorial.mp4} & Etapa 2 (Juez Bimodal) & \textit{Recall@3 / @5} & $89,3\%$ ($50/56$) & $\mathbf{92,9\%}$ ($52/56$) & $\mathbf{+3,6\text{ pp}}$ \\
+\texttt{python\_tutorial.mp4} & Etapa 2 (Juez Bimodal) & \textit{MRR} & $0,848$ & $\mathbf{0,911}$ & $\mathbf{+0,063}$ \\ \addlinespace[2.5pt]
+\texttt{python\_tutorial.mp4} & Multi-objetivo ($10$) & \textit{Interval Recall} & $78,3\%$ & $\mathbf{82,1\%}$ & $\mathbf{+3,8\text{ pp}}$ \\
+\texttt{python\_tutorial.mp4} & Negativas ($8$) & Rechazo FP & $100,0\%$ ($0/40$) & $\mathbf{100,0\%}$ ($0/40$) & $0,0\text{ pp}$ \\
 \midrule
-\texttt{animals.mp4} & Etapa 1 (Qdrant) & \textit{Recall@1} & $\mathbf{80,4\%}$ ($37/46$) & $71,7\%$ ($33/46$) & $-8,7\text{ pp}$ \\
+\texttt{animals.mp4} & Etapa 1 (Qdrant) & \textit{Recall@1}$^*$ & $\mathbf{80,4\%}$ ($37/46$) & $71,7\%$ ($33/46$) & $-8,7\text{ pp}$ \\
 \texttt{animals.mp4} & Etapa 1 (Qdrant) & \textit{Recall@5} & $95,7\%$ ($44/46$) & $\mathbf{100,0\%}$ ($46/46$) & $\mathbf{+4,3\text{ pp}}$ \\ \addlinespace[2.5pt]
 \texttt{animals.mp4} & Etapa 2 (Juez Bimodal) & \textit{Recall@1} & $89,1\%$ ($41/46$) & $\mathbf{93,5\%}$ ($43/46$) & $\mathbf{+4,4\text{ pp}}$ \\
+\texttt{animals.mp4} & Etapa 2 (Juez Bimodal) & \textit{Recall@3} & $93,5\%$ ($43/46$) & $\mathbf{95,7\%}$ ($44/46$) & $\mathbf{+2,2\text{ pp}}$ \\
 \texttt{animals.mp4} & Etapa 2 (Juez Bimodal) & \textit{Recall@5} & $93,5\%$ ($43/46$) & $\mathbf{97,8\%}$ ($45/46$) & $\mathbf{+4,3\text{ pp}}$ \\
-\texttt{animals.mp4} & Etapa 2 (Juez Bimodal) & \textit{MRR} & $0,913$ & $\mathbf{0,951}$ & $\mathbf{+0,038}$ \\
+\texttt{animals.mp4} & Etapa 2 (Juez Bimodal) & \textit{MRR} & $0,913$ & $\mathbf{0,951}$ & $\mathbf{+0,038}$ \\ \addlinespace[2.5pt]
+\texttt{animals.mp4} & Negativas ($8$) & Rechazo FP & $100,0\%$ ($0/40$) & $\mathbf{100,0\%}$ ($0/40$) & $0,0\text{ pp}$ \\
 \bottomrule
+\multicolumn{6}{l}{\scriptsize $^*$En el registro pareado conservado del benchmark solo visual (\texttt{e2e\_report\_20261106.csv}) se registraron $39/46$ aciertos en E1; ambos valores sirven de referencia en la prueba de significación.}
 \end{tabular}
+\end{adjustbox}
 \end{table}
 
-\subsubsection{Discusión de Fenómenos Perceptuales}
-Los datos empíricos revelan dos dinámicas fundamentales:
+\subsubsection{Discusión de Fenómenos Perceptuales y Significación Estadística Pareada}
+Los datos experimentales revelan dos dinámicas complementarias corroboradas mediante contrastes estadísticos pareados no paramétricos (prueba exacta de \textit{McNemar} para \textit{Recall@1} binario y prueba de rangos con signo de \textit{Wilcoxon} para \textit{MRR} por consulta):
 \begin{enumerate}
-    \item \textbf{Convergencia Modal en Metraje Educativo:} En \texttt{python\_tutorial.mp4}, la inyección de la locución hablada produce una ganancia masiva de $+17,8$ puntos porcentuales en \textit{Recall@1} en la primera etapa ($67,9\% \to 85,7\%$). La coincidencia temporal entre el código tecleado y la explicación oral del ponente refuerza la densidad direccional del embedding omnimodal, posicionando 10 consultas adicionales directamente en el primer lugar del ranking sin requerir reordenación. Tras la actuación del verificador en la Etapa 2, el \textit{Recall@1} alcanza el **$89,3\%$ ($50/56$)** con un \textit{MRR} de **$0,911$**.
-    \item \textbf{Compensación Asimétrica ante Metraje Desacoplado (\textit{B-roll}):} En \texttt{animals.mp4}, donde la narración verbal describe conceptos biológicos mientras la cámara enfoca especies que no son mencionadas por su nombre, la fusión de audio induce una leve desviación en la primera etapa ($\Delta\text{\textit{Recall@1}} = -8,7\text{ pp}$). Sin embargo, la cobertura en \textit{Recall@5} asciende al **$100,0\%$ ($46/46$)**, garantizando que el fragmento correcto jamás es descartado por el motor vectorial. Posteriormente, el árbitro bimodal de Etapa 2 analiza de forma disjunta la evidencia visual y auditiva, corrigiendo por completo el desfase y alcanzando un récord de **$93,5\%$ de \textit{Recall@1}** ($43/46$) y un **$97,8\%$ de \textit{Recall@5}** con un \textit{MRR} de **$0,951$**.
+    \item \textbf{Convergencia Modal en Metraje Educativo (\texttt{python\_tutorial.mp4}, $N=56$):} La inyección de la locución hablada produce una ganancia de $+17,8\text{ pp}$ en \textit{Recall@1} en Etapa 1 ($38/56 \to 48/56$, con $0/10$ pares discordantes; \textbf{$p_{\text{McNemar}} = 0,0020$}) y eleva el \textit{MRR} de $0,7789$ a $0,8973$ ($12$ pares no nulos; \textbf{$p_{\text{Wilcoxon}} = 0,0025$}), demostrando una mejora altamente significativa ($p < 0,01$). Tras el verificador de Etapa 2, el \textit{Recall@1} alcanza el \textbf{$89,3\%$ ($50/56$)} y el \textit{MRR} llega a \textbf{$0,9107$} (cubriendo el $100,0\%$ en tipos primitivos $9/9$, consola $4/4$ y variables $3/3$ en multi-objetivo). Al contrastar Etapa 2 visual frente a Etapa 2 bimodal ($45/56 \to 50/56$), el verificador visual ya compensaba parte de las ausencias ($p_{\text{McNemar}} = 0,1250$; $p_{\text{Wilcoxon}} = 0,1405$).
+    \item \textbf{Compensación Asimétrica ante Metraje Desacoplado (\textit{B-roll}, \texttt{animals.mp4}, $N=46$ y Global $N=102$):} En \texttt{animals.mp4}, la desviación direccional inducida por la narración en Etapa 1 sobre el CSV pareado ($39/46 \to 33/46$; \textit{MRR} $0,9130 \to 0,8134$) no resulta estadísticamente significativa ($p_{\text{McNemar}} = 0,1460$; $p_{\text{Wilcoxon}} = 0,0708$), mientras que la cobertura \textit{Recall@5} asciende al \textbf{$100,0\%$ ($46/46$)}. A partir de esa ventana íntegra, el árbitro bimodal de Etapa 2 eleva el acierto de $33/46$ a \textbf{$43/46$ ($93,5\%$)} ($0/10$ pares discordantes) y el \textit{MRR} de $0,8134$ a \textbf{$0,9511$}, con alta significación estadística (\textbf{$p_{\text{McNemar}} = 0,0020$}; \textbf{$p_{\text{Wilcoxon}} = 0,0040$}; $p < 0,01$). En el agregado global bimodal ($N=102$), la transición de Etapa 1 a Etapa 2 ($81/102 \to 93/102$; \textit{MRR} $0,8595 \to 0,9289$) confirma la aportación estadísticamente significativa del verificador (\textbf{$p_{\text{McNemar}} = 0,0018$}; \textbf{$p_{\text{Wilcoxon}} = 0,0083$}; $p < 0,01$).
 \end{enumerate}
 
+\subsubsection{Estudio de Casos Críticos: Falsos Negativos, Resiliencia Fonética y Desambiguación Sintáctica}
+\label{subsubsec:estudio_casos_criticos_audio}
+Para comprender el mecanismo exacto mediante el cual la arquitectura bimodal corrige los fallos perceptivos de la línea base visual, se auditaron en detalle dos consultas críticas sobre \texttt{python\_tutorial.mp4}: \texttt{\string"Diccionarios\string"} y \texttt{\string"Bucles while\string"}.
+
+\paragraph{Caso 1: Erradicación del falso negativo y captura de frontera en \texttt{\string"Diccionarios\string"} ($01\text{:}01{,}1\text{ -- }01\text{:}40{,}2$).}
+En la configuración puramente visual, el bloque de estructuras de datos presentaba baja legibilidad de la sintaxis \texttt{dict \{name: Brais\}} y aparición del rótulo gráfico \textit{``Variables''} al final del plano ($01\text{:}33{,}1\text{ -- }01\text{:}40{,}2$), provocando que el verificador visual descartase el fragmento con puntuación $0,0$. Tras activar \texttt{audio\_transcriber.py}:
+\begin{itemize}
+    \item El fragmento principal (\texttt{chunk\_index = 17}, $85,1\text{ s -- }93,1\text{ s}$) eleva su similitud del coseno de $0,4151$ a $\mathbf{0,4480}$ y recibe $\text{\texttt{relevance\_score}} = \mathbf{1,0}$ al incorporar la locución: \textit{``Y ya por último, los diccionarios. Que utilizan la palabra reservada, dict. Y en realidad, designa un conjunto de claves valor''}.
+    \item El fragmento de transición posterior (\texttt{chunk\_index = 18}, $93,1\text{ s -- }100,2\text{ s}$), antes descartado ($0,0$), sube su similitud de $0,3812$ a $\mathbf{0,4178}$ y pasa a validarse con $\mathbf{0,90}$ gracias a la voz: \textit{``Lo representamos entre llaves, pero esta clave valor separadas por dos puntos''}.
+    \item La condición de solapamiento mínimo ($\Delta_{\min} = 0,2\text{ s}$) en \texttt{align\_transcript\_with\_chunks} captura además la oración fronteriza al final del \texttt{chunk\_index = 16} ($77,1\text{ s -- }85,1\text{ s}$), asignándole relevancia graduada $\mathbf{0,50}$ y descartando los fragmentos \texttt{14} y \texttt{15} de listas y \texttt{set}.
+\end{itemize}
+
+\paragraph{Caso 2: Superación del corte \textit{Top-K}, resiliencia ante ruido fonético ASR y discriminación \texttt{for}/\texttt{while} en \texttt{\string"Bucles while\string"} ($03\text{:}51$).}
+En la configuración visual pura, al buscar \texttt{while index < 5:} ($03\text{:}51 = 231,0\text{ s}$), el fragmento objetivo obtenía $\cos = \mathbf{0,3893}$ y caía al puesto \textbf{\#7} en Qdrant, excluido por el corte \texttt{top\_k = 5} frente a la portada \textit{``Bucles''} ($\mathbf{0,4315}$, \#1) y planos \texttt{if/else}. Con la fusión audio-visual (\texttt{run\_20261109\_143202}):
+\begin{enumerate}
+    \item \textbf{Promoción directa del Rango \#7 al \#1 en Etapa 1:} El fragmento principal (\texttt{chunk\_index = 55}, $232,4\text{--}238,3\text{ s}$) sube $\mathbf{+0,1064}$ en similitud coseno ($0,3893 \to \mathbf{0,4957}$, \#1), seguido del \texttt{chunk\_index = 54} ($224,4\text{--}232,4\text{ s}$, $\cos = \mathbf{0,4914}$, \#2), cubriendo exactamente el segundo $231,0\text{ s}$.
+    \item \textbf{Resiliencia semántica ante errores fonéticos de transcripción:} Al operar Whisper (\texttt{base}) con idioma español (\texttt{language=es}), transcribió \textit{``while''} como \textit{``Guile''}: \textit{``Otro tipo de bucle que tenemos en Python es el Guile, donde aquí vamos a establecer una condición para que se ejecute de manera indefinida mientras esta se cumpla''}. Tanto el embedding como el verificador \textit{Gemini 3.5 Flash Lite} resolvieron la ambigüedad cruzando la definición oral con la sintaxis visual \texttt{while index < 5:}, asignando relevancias $\mathbf{1,0}$ y $\mathbf{0,90}$.
+    \item \textbf{Desambiguación fina (\texttt{for} vs. \texttt{while}):} El fragmento precedente (\texttt{chunk\_index = 53}, $221,1\text{--}224,4\text{ s}$) comparte idéntico aspecto visual ($\cos = 0,4486$, \#4), pero el verificador lee \textit{``Podemos usar un for...''} y lo descarta con $\mathbf{0,0}$, haciendo lo propio con el \texttt{chunk\_index = 50} (\texttt{if/else}).
+\end{enumerate}
+
+La Figura~\ref{fig:promocion_bucles_while_bimodal} y el Cuadro~\ref{tab:micro_analisis_consultas_criticas} documentan visual y numéricamente ambas auditorías.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    oldbox/.style={rectangle, draw=red!80!black, fill=red!8, thick, text width=6.3cm, minimum height=2.3cm, align=left, font=\scriptsize, rounded corners=3pt},
+    newbox/.style={rectangle, draw=blue!80!black, fill=blue!8, thick, text width=6.3cm, minimum height=2.3cm, align=left, font=\scriptsize, rounded corners=3pt},
+    judgebox/.style={rectangle, draw=green!60!black, fill=green!10, very thick, text width=15.1cm, minimum height=2.1cm, align=left, font=\scriptsize, rounded corners=3pt},
+    arrow/.style={-stealth, very thick, draw=black!80}
+]
+\node[oldbox] (vis) at (-4.5, 1.8) {
+    \textbf{Etapa 1: Solo Visual (Sin Audio):}\\[3pt]
+    $\bullet$ \textbf{\#1 Portada ``Bucles'':} $\cos = 0{,}4315$\\
+    $\bullet$ \#2--\#5 Planos \texttt{if/else} y transiciones\\
+    \textcolor{red!85!black}{$\boldsymbol{\times}$ \textbf{\#7 Código \texttt{while} ($03\text{:}51$):} $\cos = 0{,}3893$}\\
+    \textcolor{red!85!black}{\textbf{(Excluido por corte \texttt{top\_k = 5})}}
+};
+
+\node[newbox] (aud) at (4.5, 1.8) {
+    \textbf{Etapa 1: Fusión Temprana (Imagen + Voz):}\\[3pt]
+    \textcolor{green!50!black}{$\boldsymbol{\checkmark}$ \textbf{\#1 \texttt{Chunk 55} ($232{,}4\text{--}238{,}3\text{s}$):} $\cos = \mathbf{0{,}4957}$}\\
+    \textcolor{green!50!black}{$\boldsymbol{\checkmark}$ \textbf{\#2 \texttt{Chunk 54} ($224{,}4\text{--}232{,}4\text{s}$):} $\cos = \mathbf{0{,}4914}$}\\
+    $\bullet$ \#3 \texttt{Chunk 52} (Intro bucles): $\cos = 0{,}4879$\\
+    $\bullet$ \#4 \texttt{Chunk 53} (Bucle \texttt{for}): $\cos = 0{,}4486$
+};
+
+\node[judgebox] (judge) at (0, -0.95) {
+    \textbf{Etapa 2: Verificador Bimodal (\texttt{gemini-3.5-flash-lite}: Fotogramas Clave + Transcripción Alineada):}\\[3pt]
+    $\mathbf{1.}$ \textbf{Resiliencia Fonética (\texttt{Chunks 55 y 54}):} Aunque Whisper transcribe \textit{``while''} como \textit{``Guile''}, el VLM cruza la definición hablada (\textit{``condición... mientras esta se cumpla''}) con el código \texttt{while index < 5:} $\longrightarrow$ \textcolor{green!50!black}{\textbf{VALIDADOS ($1{,}00$ y $0{,}90$)}}.\\[2pt]
+    $\mathbf{2.}$ \textbf{Discriminación Sintáctica (\texttt{Chunks 53 y 50}):} Lee en la transcripción \textit{``Podemos usar un for...''} e \textit{``if / else''} sobre el mismo fondo visual del editor $\longrightarrow$ \textcolor{red!80!black}{\textbf{DESCARTADOS ($0{,}00$: Falso Positivo evitado)}}.
+};
+
+\draw[arrow, blue!80!black] (vis.east) -- node[above=1pt, font=\scriptsize\bfseries, text=blue!85!black] {$\mathbf{+0{,}1064}$} node[below=1pt, font=\tiny\bfseries, text=blue!85!black] {Coseno} (aud.west);
+\draw[arrow, green!60!black] (aud.south) -- (judge.north -| aud.south);
+\end{tikzpicture}
+\caption{Mecanismo de corrección en la consulta \texttt{\string"Bucles while\string"}: la fusión temprana eleva el fragmento objetivo del séptimo al primer puesto en Qdrant ($+0,1064$ en coseno) y el verificador bimodal valida el código pese a la transcripción fonética \textit{``Guile''}, descartando los fragmentos adyacentes sobre bucles \texttt{for}.}
+\label{fig:promocion_bucles_while_bimodal}
+\end{figure}
+
+\begin{table}[htbp]
+\centering
+\small
+\renewcommand{\arraystretch}{1.15}
+\setlength{\tabcolsep}{3.5pt}
+\caption{Auditoría detallada de fragmentos en las consultas críticas \texttt{\string"Diccionarios\string"} y \texttt{\string"Bucles while\string"} sobre \texttt{python\_tutorial.mp4}.}
+\label{tab:micro_analisis_consultas_criticas}
+\begin{tabularx}{\linewidth}{llccc>{\raggedright\arraybackslash}X}
+\toprule
+\textbf{Consulta} & \textbf{Chunk (Intervalo)} & \textbf{Cos. Visual} & \textbf{Cos. Bimodal} & \textbf{Score Juez} & \textbf{Veredicto Bimodal} \\
+\midrule
+\texttt{\string"Diccionarios\string"} & \texttt{\#17} ($01\text{:}25{,}1\text{--}01\text{:}33{,}1$) & $0{,}4151$ & $\mathbf{0{,}4480}$ & $\mathbf{1{,}00}$ & Validado (Código + Voz \texttt{dict}) \\
+\texttt{\string"Diccionarios\string"} & \texttt{\#18} ($01\text{:}33{,}1\text{--}01\text{:}40{,}2$) & $0{,}3812$ & $\mathbf{0{,}4178}$ & $\mathbf{0{,}90}$ & Rescatado (Antes $0{,}0$ sin audio) \\
+\texttt{\string"Diccionarios\string"} & \texttt{\#16} ($01\text{:}17{,}1\text{--}01\text{:}25{,}1$) & $0{,}3806$ & $\mathbf{0{,}4046}$ & $\mathbf{0{,}50}$ & Validado (Frontera solapada) \\
+\texttt{\string"Diccionarios\string"} & \texttt{\#14}--\texttt{\#15} ($01\text{:}01{,}1\text{--}01\text{:}17{,}1$) & $0{,}3790$ & $0{,}3910$ & $\mathbf{0{,}00}$ & Descartado (Listas y \texttt{set}) \\
+\midrule
+\texttt{\string"Bucles while\string"} & \texttt{\#55} ($03\text{:}52{,}4\text{--}03\text{:}58{,}3$) & $0{,}3893$ (\#7) & $\mathbf{0{,}4957}$ (\#1) & $\mathbf{1{,}00}$ & Validado (Pese a ASR \textit{``Guile''}) \\
+\texttt{\string"Bucles while\string"} & \texttt{\#54} ($03\text{:}44{,}4\text{--}03\text{:}52{,}4$) & $0{,}3893$ (\#7) & $\mathbf{0{,}4914}$ (\#2) & $\mathbf{0{,}90}$ & Validado (Frontera en $03\text{:}51$) \\
+\texttt{\string"Bucles while\string"} & \texttt{\#52} ($03\text{:}18{,}1\text{--}03\text{:}21{,}1$) & $0{,}4315$ (\#1) & $0{,}4879$ (\#3) & $\mathbf{0{,}60}$ & Validado (Mención general) \\
+\texttt{\string"Bucles while\string"} & \texttt{\#53} ($03\text{:}41{,}1\text{--}03\text{:}44{,}4$) & $0{,}4187$ (\#4) & $0{,}4486$ (\#4) & $\mathbf{0{,}00}$ & Descartado (Explica bucle \texttt{for}) \\
+\texttt{\string"Bucles while\string"} & \texttt{\#50} ($03\text{:}25{,}4\text{--}03\text{:}33{,}4$) & $0{,}4219$ (\#2) & $0{,}4332$ (\#5) & $\mathbf{0{,}00}$ & Descartado (Bloques \texttt{if/else}) \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsubsection{Divergencia Audio-Visual en Metraje \textit{B-Roll} y Deduplicación por Transcripción}
+\label{subsubsec:divergencia_broll_y_deduplicacion}
+Complementariamente, las ejecuciones auditadas \texttt{run\_20261109\_180159} y \texttt{run\_20261109\_183310} sobre \texttt{animals.mp4} examinaron el comportamiento del espacio omnimodal ante consultas de distinta granularidad semántica bajo voz en \textit{off} desacoplada:
+\begin{enumerate}
+    \item \textbf{Desplazamiento direccional de \texttt{\string"Felinos\string"}:} Mientras consultas visuales específicas (\texttt{\string"León\string"}, \texttt{\string"Reptiles\string"}, \texttt{\string"Glóbulos rojos\string"}) alcanzan el $\mathbf{100,0\%}$ de recuperación, la categoría taxonómica \texttt{\string"Felinos\string"} solo recupera $1/4$ ejemplares (\texttt{chunk \#66}, gato atigrado acompañado de locución sobre mamíferos, $\cos = \mathbf{0,3959}$, \#1). Los otros tres felinos quedan desplazados por locuciones introductorias no zoológicas al \#35 (gato gris, $\cos = 0,3635$), \#45 (leona con collar, $\cos = 0,3581$) y \#51 (león macho, $\cos = 0,3551$), relegados fuera del corte $\text{\texttt{fetch\_k}} = 10$ por fragmentos intermedios ($76\text{--}193\text{ s}$) ricos en léxico biológico genérico ($\cos = 0,3734\text{--}0,3899$).
+    \item \textbf{Saturación por micro-cortes repetidos y criterio \texttt{is\_same\_transcript\_neighbor}:} La toma rápida de cebras ($115,3\text{--}120,5\text{ s}$) y la animación sanguínea ($159,0\text{--}167,2\text{ s}$) acaparaban $6$ de las $10$ plazas de Etapa 2 al superar $\text{\texttt{micro\_\allowbreak chunk\_\allowbreak duration}} = 1,0\text{ s}$ compartiendo idéntica locución. Al ampliar \texttt{\_deduplicate\_\allowbreak temporal\_\allowbreak candidates} en \texttt{src/\allowbreak rag\_engine/\allowbreak service.py} para fusionar vecinos con idéntica transcripción no vacía dentro de $\text{\texttt{min\_\allowbreak scene\_\allowbreak separation}} = 4,0\text{ s}$, la auditoría \texttt{183310} colapsó los duplicados y liberó $4$ plazas reales en el \textit{Top-10}. Desactivando finalmente el canal ASR (\texttt{enable\_audio = False}), $3/4$ felinos ingresaron en el \textit{Top-6} (\#1 $\cos=0,4122$, \#2 $\cos=0,3967$, \#6 $\cos=0,3811$), justificando el control \texttt{-{}-no-audio} (Cuadro~\ref{tab:experimento_broll_deduplicacion}).
+\end{enumerate}
+
+\begin{table}[htbp]
+\centering
+\small
+\renewcommand{\arraystretch}{1.18}
+\setlength{\tabcolsep}{3.5pt}
+\caption{Efecto de la deduplicación por transcripción idéntica (\texttt{run\_20261109\_183310}) y del desacoplamiento de audio sobre \texttt{animals.mp4}.}
+\label{tab:experimento_broll_deduplicacion}
+\begin{tabularx}{\linewidth}{l >{\raggedright\arraybackslash}p{3.8cm} >{\raggedright\arraybackslash}p{3.0cm} >{\raggedright\arraybackslash}X c}
+\toprule
+\textbf{Consulta} & \textbf{Configuración / Run} & \textbf{Huecos Repetidos Top-10} & \textbf{Puestos Qdrant (Objetivo)} & \textbf{Aciertos Validados} \\
+\midrule
+\texttt{\string"León\string"} & Audio + Dedup (\texttt{180159}) & $2/10$ (Cebras) & \#1 ($0{,}3997$), \#3 ($0{,}3697$) & $\mathbf{2/2}$ ($\mathbf{100,0\%}$) \\
+\texttt{\string"Reptiles\string"} & Audio + Dedup (\texttt{180159}) & $2/10$ (Cebras) & \#4 ($0{,}3916$), \#7 ($0{,}3899$) & $\mathbf{2/2}$ ($\mathbf{100,0\%}$) \\
+\texttt{\string"Glóbulos rojos\string"} & Audio + Dedup (\texttt{180159}) & $0/10$ (Relevantes) & \#1 a \#7 ($0{,}4248\text{--}0{,}4385$) & $\mathbf{4/4}$ ($\mathbf{100,0\%}$) \\
+\midrule
+\texttt{\string"Felinos\string"} & Audio sin Dedup Tr. (\texttt{180159}) & $6/10$ (4 Cebras + 2 Sangre) & \#1, \#35, \#45, \#51 & $1/4$ ($25,0\%$) \\
+\texttt{\string"Felinos\string"} & Audio con Dedup Tr. (\texttt{183310}) & $\mathbf{0/10}$ (Colapsados en 2) & \#1, \#31, \#41, \#47 & $1/4$ ($25,0\%$) \\
+\texttt{\string"Felinos\string"} & Solo Visual (\texttt{enable\_audio=False}) & $\mathbf{0/10}$ (Sin ruido ASR) & \textbf{\#1 ($0{,}4122$), \#2 ($0{,}3967$), \#6 ($0{,}3811$)} & $\mathbf{3/4}$ ($\mathbf{75,0\%}$) \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
 \subsubsection{Validación Cuantitativa de la Hipótesis 1 ($H_1$)}
-Se confirma plenamente la Hipótesis 1: la fusión temprana audio-visual incrementa sustancialmente la precisión en contenidos sincronizados (+17,8 pp en \textit{Recall@1}) y, combinada con la verificación bimodal de segunda etapa, neutraliza el desacoplamiento en secuencias de tipo \textit{B-roll}, superando a la línea base visual en ambos dominios audiovisuales.
+Se confirma plenamente la Hipótesis 1: la fusión temprana audio-visual incrementa significativamente la precisión en contenidos sincronizados ($+17,8\text{ pp}$ en \textit{Recall@1}, $p_{\text{McNemar}} = 0,0020$) y, combinada con la verificación bimodal de segunda etapa ($p_{\text{McNemar}} = 0,0018$ global), neutraliza el desacoplamiento en secuencias de tipo \textit{B-roll}, superando a la línea base visual en ambos dominios audiovisuales.

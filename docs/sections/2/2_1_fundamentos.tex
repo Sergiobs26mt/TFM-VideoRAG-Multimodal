@@ -213,3 +213,20 @@ La elección de la dimensionalidad operativa del espacio latente introduce un co
 \end{table}
 
 Por el contrario, operar sobre un estándar de \textbf{768 dimensiones} (que constituye el tope nativo de modelos ligeros modulares como \textit{EmbeddingGemma 2} (con posibilidad de truncado adicional a $256$ o $128$ dimensiones) y uno de los puntos de corte recomendados en \textit{Gemini Embedding 2}) reduce exactamente en un $75\%$ la huella de memoria de cada vector respecto a las $3.072$ dimensiones (pasando de $12,0\,\text{KB}$ a $3,0\,\text{KB}$ por fragmento en precisión simple de 32 bits). Esta compresión hace que la base de datos vectorial resultante sea significativamente más económica de alojar en memoria RAM y más rápida de consultar localmente, a cambio de asumir una ligera reducción en la granularidad semántica fina frente al vector completo de $3.072$ dimensiones.
+
+\subsubsection{Aprendizaje Contrastivo (\textit{InfoNCE}) y el Fenómeno de la Brecha Modal (\textit{Modality Gap})}
+\label{subsubsec:infonce_modality_gap}
+
+Desde el punto de vista de la optimización neuronal, la alineación geométrica entre consultas textuales y fragmentos audiovisuales se entrena mediante funciones objetivo contrastivas simétricas basadas en la pérdida \textbf{\textit{InfoNCE}} (\textit{Noise-Contrastive Estimation}) \cite{vandenoord2018cpc, radford2021clip}. Dado un lote (\textit{mini-batch}) de $B$ pares emparejados $\{(\mathbf{q}_i, \mathbf{v}_i)\}_{i=1}^{B}$ proyectados sobre la hiperesfera unitaria $\mathbb{S}^{d-1}$, el entrenamiento maximiza la similitud de los pares positivos en la diagonal frente a los $B-1$ distractores negativos del lote, modulando la concentración de la distribución mediante un hiperparámetro de temperatura $\tau > 0$:
+
+\begin{equation}
+\mathcal{L}_{\text{InfoNCE}} = -\frac{1}{2B} \sum_{i=1}^{B} \left[
+\log \frac{\exp\!\left(\text{sim}_{\cos}(\mathbf{q}_i, \mathbf{v}_i) / \tau\right)}{\sum_{j=1}^{B} \exp\!\left(\text{sim}_{\cos}(\mathbf{q}_i, \mathbf{v}_j) / \tau\right)} +
+\log \frac{\exp\!\left(\text{sim}_{\cos}(\mathbf{v}_i, \mathbf{q}_i) / \tau\right)}{\sum_{j=1}^{B} \exp\!\left(\text{sim}_{\cos}(\mathbf{v}_i, \mathbf{q}_j) / \tau\right)}
+\right]
+\label{eq:infonce_loss}
+\end{equation}
+
+En la Ecuación~\eqref{eq:infonce_loss}, la temperatura $\tau$ controla la severidad con la que se penalizan los ejemplos negativos cercanos. Sin embargo, Liang et al. \cite{liang2022modalitygap} demostraron un fenómeno topológico inherente a los espacios contrastivos multimodales denominado \textbf{\textit{Modality Gap} (Brecha Modal)}: debido a que los codificadores de distinta modalidad nacen en regiones cónicas disjuntas de $\mathbb{S}^{d-1}$ tras la inicialización aleatoria, y a que la pérdida InfoNCE depende exclusivamente de las \textit{diferencias relativas} entre los pares positivos y negativos escaladas por $1/\tau$, la optimización converge preservando un desplazamiento vectorial sistemático entre el subespacio textual y el subespacio visual/audiovisual.
+
+Esta propiedad explica rigurosamente un hallazgo empírico central observado en la literatura y en nuestros experimentos sobre \textit{Gemini Embedding 2} y \textit{Qwen3-VL-Embedding}: incluso cuando un par consulta-fragmento constituye un acierto semántico inequívoco de rango \#1, su similitud del coseno cruzada (\textit{cross-modal}) rara vez se aproxima a $1,0$, agrupándose de manera natural dentro de la banda $[0{,}28;\, 0{,}50]$ (mientras que pares intramodales texto-texto alcanzan valores mucho mayores). En consecuencia, el \textit{Modality Gap} invalida cualquier mecanismo de filtrado basado en umbrales fijos de coseno en la Etapa 1 y fundamenta la necesidad teórica de delegar la discriminación definitiva y el rechazo de falsos positivos a un verificador bimodal de Etapa 2.

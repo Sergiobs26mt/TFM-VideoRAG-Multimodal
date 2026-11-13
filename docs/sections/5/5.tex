@@ -1,7 +1,7 @@
 \section{Resultados Experimentales y Discusión Crítica}
 \label{sec:resultados_experimentales_discusion}
 
-En esta sección se presentan y discuten en profundidad los resultados empíricos obtenidos en las tres baterías de evaluación experimental diseñadas para contrastar las hipótesis $H_1$, $H_2$ y $H_3$. Se describe detalladamente la composición de los dos corpus audiovisuales de referencia y el catálogo de 138 consultas anotadas. A continuación, se expone el estudio de ablación dimensional guiado por \textit{Matryoshka Representation Learning} (MRL). Posteriormente, se evalúa el beneficio cuantitativo de la integración audio-visual y la verificación bimodal de segunda etapa frente a la línea base visual. Seguidamente, se analiza el comportamiento del sistema ante consultas multi-objetivo y consultas negativas de control para la discriminación de falsos positivos. Por último, se examina la eficiencia computacional, los desgloses de latencia granular y la escalabilidad de la huella de memoria vectorial.
+En esta sección se presentan y discuten en profundidad los resultados empíricos obtenidos en las tres baterías de evaluación experimental diseñadas para contrastar las hipótesis $H_1$, $H_2$ y $H_3$. Se describe detalladamente la composición de los dos corpus audiovisuales de referencia y el catálogo de 138 consultas anotadas. A continuación, se expone el estudio de ablación dimensional guiado por \textit{Matryoshka Representation Learning} (MRL). Posteriormente, se evalúa el beneficio cuantitativo de la integración audio-visual y la verificación bimodal de segunda etapa frente a la línea base visual. Seguidamente, se analiza el comportamiento del sistema ante consultas multi-objetivo y consultas negativas de control para la discriminación de falsos positivos. Por último, se examina la eficiencia computacional, los desgloses de latencia granular y la escalabilidad de la huella de memoria vectorial, culminando con una comparativa empírica controlada entre el modelo propietario en la nube y dos codificadores locales abiertos (\textit{Qwen3-VL-Embedding-2B} y \textit{EmbeddingGemma 2}) ejecutados en Apple Silicon.
 
 \input{sections/5/5_1_banco_pruebas_corpus}
 \newpage
@@ -16,3 +16,6 @@ En esta sección se presentan y discuten en profundidad los resultados empírico
 \newpage
 
 \input{sections/5/5_5_discusion_implicaciones}
+\newpage
+
+\input{sections/5/5_6_comparativa_backends_locales}
