@@ -46,19 +46,24 @@ EMBEDDING_BACKENDS: dict[str, EmbeddingBackendSpec] = {
 }
 
 
-def default_dimension(backend: str) -> int:
-    """Devuelve la dimensión nativa (la mayor) del backend."""
-    return EMBEDDING_BACKENDS[backend].dimensions[0]
-
-
-def validate_embedding_choice(backend: str, dim: int) -> None:
-    """Lanza ``ValueError`` si el backend no existe o no admite la dimensión."""
+def _require_backend_spec(backend: str) -> EmbeddingBackendSpec:
     spec = EMBEDDING_BACKENDS.get(backend)
     if spec is None:
         raise ValueError(
             f"Backend de embeddings desconocido: {backend!r}. "
             f"Opciones: {', '.join(EMBEDDING_BACKENDS)}."
         )
+    return spec
+
+
+def default_dimension(backend: str) -> int:
+    """Devuelve la dimensión nativa (la mayor) del backend."""
+    return _require_backend_spec(backend).dimensions[0]
+
+
+def validate_embedding_choice(backend: str, dim: int) -> None:
+    """Lanza ``ValueError`` si el backend no existe o no admite la dimensión."""
+    spec = _require_backend_spec(backend)
     if dim not in spec.dimensions:
         raise ValueError(
             f"Dimensión {dim} no válida para '{backend}'. "

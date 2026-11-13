@@ -16,7 +16,6 @@ from typing import cast
 from src.config import (
     DB_PATH,
     DEFAULT_EMBEDDING_BACKEND,
-    EMBEDDING_BACKENDS,
     PROCESSED_DIR,
     RAW_DIR,
     RERANKER_MODEL,
@@ -25,6 +24,7 @@ from src.config import (
     SearchConfig,
     collection_name_for,
     default_dimension,
+    validate_embedding_choice,
 )
 from src.embeddings.base import MultimodalVectorizer
 from src.embeddings.factory import create_vectorizer, device_label_for
@@ -152,16 +152,13 @@ class VideoRAGService:
         embedding_backend: str = DEFAULT_EMBEDDING_BACKEND,
         reranker_model: str = RERANKER_MODEL,
     ) -> None:
-        if embedding_backend not in EMBEDDING_BACKENDS:
-            raise ValueError(
-                f"Backend de embeddings desconocido: {embedding_backend!r}. "
-                f"Opciones: {', '.join(EMBEDDING_BACKENDS)}."
-            )
-        resolved_size = (
-            default_dimension(embedding_backend) if vector_size is None else vector_size
-        )
+        default_size = default_dimension(embedding_backend)
+        resolved_size = default_size if vector_size is None else vector_size
         if resolved_size < 1:
             raise ValueError("vector_size debe ser >= 1.")
+        if engine is None or vectorizer is None:
+            # Permite vectores sintéticos en pruebas cuando se inyectan ambos dobles.
+            validate_embedding_choice(embedding_backend, resolved_size)
         if engine is None:
             collection = collection_name_for(embedding_backend, resolved_size)
             self.engine = QdrantSearchEngine(path=db_path)
@@ -246,15 +243,11 @@ class VideoRAGService:
             if embedding_backend is not None
             else self._embedding_backend
         )
-        if backend not in EMBEDDING_BACKENDS:
-            raise ValueError(
-                f"Backend de embeddings desconocido: {backend!r}. "
-                f"Opciones: {', '.join(EMBEDDING_BACKENDS)}."
-            )
+        default_dim = default_dimension(backend)
         if output_dimensionality is not None:
             dim = output_dimensionality
         elif backend != self._embedding_backend:
-            dim = default_dimension(backend)
+            dim = default_dim
         else:
             dim = self._vector_size
         self.set_embedding(backend, dim)

@@ -145,7 +145,7 @@ Todos los motores implementan el protocolo `MultimodalVectorizer` (`base.py`) y 
 - **Descarga inicial de pesos locales**: la primera ejecución con `qwen3-vl-2b` y `gemma2` descarga en conjunto **unos 6 GB** de pesos en `~/.cache/huggingface` (~4 GB Qwen3-VL 2B y ~2 GB EmbeddingGemma 2).
 
 ### 4.4 Pipeline de ingestión: `src/processing/pipeline.py`
-`process_video_pipeline(..., output_dimensionality=3072, embedding_backend="gemini")`:
+`process_video_pipeline(..., output_dimensionality=None, embedding_backend="gemini")`:
 1. Ejecuta `process_video_single_pass` y verifica el cortafuegos `MAX_CHUNKS_PER_VIDEO = 800` (`QuotaSafetyError`) exclusivamente en backends en la nube (`gemini`).
 2. Si `enable_audio=True`, ejecuta `transcribe_video_audio` y `align_transcript_with_chunks`. Ante cualquier fallo de `ffmpeg` o del modelo local, registra un `WARNING` y continúa con la modalidad visual (**degradación elegante**).
 3. Guarda en caché los fotogramas clave (`data/processed/`). Si el backend es local, ejecuta `unload_whisper_models()` antes de cargar el modelo de embeddings y fuerza concurrencia `1` para proteger la memoria unificada.

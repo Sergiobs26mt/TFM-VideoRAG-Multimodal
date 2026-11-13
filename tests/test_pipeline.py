@@ -328,3 +328,18 @@ def test_pipeline_rejects_invalid_backend_dimension_before_processing() -> None:
                 "no_existe.mp4", embedding_backend="gemma2", output_dimensionality=3072
             )
         )
+
+
+def test_pipeline_resolves_default_dimension_from_backend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_two_fake_chunks(monkeypatch)
+    calls: list[tuple[Any, ...]] = []
+
+    def fake_create(*args: Any) -> _FakeVectorizer:
+        calls.append(args)
+        return _FakeVectorizer()
+
+    monkeypatch.setattr(pipeline, "create_vectorizer", fake_create)
+    asyncio.run(pipeline.process_video_pipeline("x.mp4", embedding_backend="gemma2"))
+    assert calls[0][0:2] == ("gemma2", 768)

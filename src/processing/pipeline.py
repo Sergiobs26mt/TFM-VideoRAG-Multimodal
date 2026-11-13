@@ -12,8 +12,8 @@ from src.config import (
     EMBEDDING_BACKENDS,
     MAX_CHUNKS_PER_VIDEO,
     PROCESSED_DIR,
-    VECTOR_SIZE,
     WHISPER_MODEL,
+    default_dimension,
     validate_embedding_choice,
 )
 from src.embeddings.factory import create_vectorizer
@@ -44,7 +44,7 @@ async def process_video_pipeline(
     resize_width: int = 160,
     entropy_stride: int = 1,
     jpeg_quality: int = 80,
-    output_dimensionality: int = VECTOR_SIZE,
+    output_dimensionality: int | None = None,
     target_width: int = 512,
     max_shot_duration: float = 8.0,
     enable_audio: bool = True,
@@ -73,7 +73,7 @@ async def process_video_pipeline(
         resize_width: Ancho de redimensionado para cálculo de SSIM y entropía rápida.
         entropy_stride: Paso de muestreo de fotogramas para cálculo de entropía.
         jpeg_quality: Calidad de compresión JPEG de las imágenes para Gemini (1-100).
-        output_dimensionality: Dimensión de los vectores de embedding generados.
+        output_dimensionality: Dimensión de los vectores de embedding (``None`` usa la predeterminada del backend).
         target_width: Ancho máximo de redimensionado de fotogramas previo a la vectorización.
         embedding_backend: Clave del backend en ``EMBEDDING_BACKENDS``.
 
@@ -88,7 +88,12 @@ async def process_video_pipeline(
     """
     if max_concurrent_requests < 1:
         raise ValueError("max_concurrent_requests debe ser >= 1.")
-    validate_embedding_choice(embedding_backend, output_dimensionality)
+    resolved_dim = (
+        default_dimension(embedding_backend)
+        if output_dimensionality is None
+        else output_dimensionality
+    )
+    validate_embedding_choice(embedding_backend, resolved_dim)
     is_local = EMBEDDING_BACKENDS[embedding_backend].is_local
 
     if progress_callback:
@@ -180,7 +185,7 @@ async def process_video_pipeline(
     vectorizer = await asyncio.to_thread(
         create_vectorizer,
         embedding_backend,
-        output_dimensionality,
+        resolved_dim,
         jpeg_quality,
         target_width,
     )

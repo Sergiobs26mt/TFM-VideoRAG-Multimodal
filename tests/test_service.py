@@ -201,24 +201,24 @@ def test_service_search_oversamples_stage1_and_truncates_stage2() -> None:
 
 def test_service_reuses_lazy_clients_and_maintains_db() -> None:
     engine = QdrantSearchEngine(path=None)
-    engine.create_collection(vector_size=3)
+    engine.create_collection(vector_size=768)
     engine.insert_chunks(
-        [VectorizedChunk(0, 0.0, 2.0, [1.0, 0.0, 0.0])],
+        [VectorizedChunk(0, 0.0, 2.0, [1.0] + [0.0] * 767)],
         video_name="a.mp4",
     )
     engine.insert_chunks(
-        [VectorizedChunk(0, 0.0, 2.0, [0.0, 1.0, 0.0])],
+        [VectorizedChunk(0, 0.0, 2.0, [0.0, 1.0] + [0.0] * 766)],
         video_name="b.mp4",
     )
 
-    service = VideoRAGService(engine=engine, vector_size=3)
+    service = VideoRAGService(engine=engine, vector_size=768)
 
     with (
         patch("src.rag_engine.service.create_vectorizer") as mock_create_vec,
         patch("src.rag_engine.service.MultimodalReranker") as mock_rerank_cls,
     ):
         vec_instance = MagicMock()
-        vec_instance.embed_text = AsyncMock(return_value=[1.0, 0.0, 0.0])
+        vec_instance.embed_text = AsyncMock(return_value=[1.0] + [0.0] * 767)
         mock_create_vec.return_value = vec_instance
 
         rerank_instance = MagicMock()
@@ -647,7 +647,7 @@ def test_service_init_sets_collection_only_when_creating_engine() -> None:
     assert svc.engine.collection_name == "custom"
 
 
-
-
-
-
+def test_service_init_validates_embedding_choice_with_injected_engine() -> None:
+    injected = QdrantSearchEngine(path=None, collection_name="custom")
+    with pytest.raises(ValueError):
+        VideoRAGService(engine=injected, embedding_backend="gemma2", vector_size=3072)
