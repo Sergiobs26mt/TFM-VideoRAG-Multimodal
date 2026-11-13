@@ -7,6 +7,7 @@ import hashlib
 import inspect
 import logging
 import re
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import replace
 from pathlib import Path
@@ -14,15 +15,21 @@ from typing import cast
 
 from src.config import (
     DB_PATH,
+    DEFAULT_EMBEDDING_BACKEND,
+    EMBEDDING_BACKENDS,
     PROCESSED_DIR,
     RAW_DIR,
     RERANKER_MODEL,
     VECTOR_SIZE,
     WHISPER_MODEL,
     SearchConfig,
+    collection_name_for,
+    default_dimension,
 )
-from src.embeddings.gemini_vectorizer import GeminiMultimodalVectorizer
+from src.embeddings.base import MultimodalVectorizer
+from src.embeddings.factory import create_vectorizer, device_label_for
 from src.models import (
+    IndexStats,
     MultimodalQuery,
     RerankedResult,
     SearchResult,
@@ -135,42 +142,66 @@ class VideoRAGService:
     def __init__(
         self,
         engine: QdrantSearchEngine | None = None,
-        vectorizer: GeminiMultimodalVectorizer | None = None,
+        vectorizer: MultimodalVectorizer | None = None,
         reranker: MultimodalReranker | None = None,
         *,
         db_path: str | None = DB_PATH,
         raw_dir: Path = RAW_DIR,
         processed_dir: Path = PROCESSED_DIR,
-        vector_size: int = VECTOR_SIZE,
+        vector_size: int | None = None,
+        embedding_backend: str = DEFAULT_EMBEDDING_BACKEND,
         reranker_model: str = RERANKER_MODEL,
     ) -> None:
-        self.engine = engine if engine is not None else QdrantSearchEngine(path=db_path)
+        if embedding_backend not in EMBEDDING_BACKENDS:
+            raise ValueError(
+                f"Backend de embeddings desconocido: {embedding_backend!r}. "
+                f"Opciones: {', '.join(EMBEDDING_BACKENDS)}."
+            )
+        resolved_size = (
+            default_dimension(embedding_backend) if vector_size is None else vector_size
+        )
+        if resolved_size < 1:
+            raise ValueError("vector_size debe ser >= 1.")
+        if engine is None:
+            collection = collection_name_for(embedding_backend, resolved_size)
+            self.engine = QdrantSearchEngine(path=db_path)
+            self.engine.use_collection(collection)
+        else:
+            self.engine = engine
         self._vectorizer = vectorizer
         self._reranker = reranker
         self._raw_dir = Path(raw_dir)
         self._processed_dir = Path(processed_dir)
-        self._vector_size = vector_size
+        self._embedding_backend = embedding_backend
+        self._vector_size = resolved_size
         self._reranker_model = reranker_model
         self._query_cache: dict[str, list[float]] = {}
         self.last_resolved_query: MultimodalQuery | None = None
+        self.last_index_stats: IndexStats | None = None
 
     @property
     def vector_size(self) -> int:
         """Dimensión activa de los vectores de embedding."""
         return self._vector_size
 
-    def set_vector_size(self, vector_size: int) -> None:
-        """Actualiza la dimensión activa y reinicia el cliente vectorizador si cambia."""
-        if vector_size < 1:
-            raise ValueError("vector_size debe ser >= 1.")
-        if vector_size != self._vector_size:
+    @property
+    def embedding_backend(self) -> str:
+        """Backend de embeddings activo."""
+        return self._embedding_backend
+
+    def set_embedding(self, backend: str, vector_size: int) -> None:
+        """Actualiza backend y dimensión activos, cambia la colección y reinicia el cliente si cambia."""
+        collection = collection_name_for(backend, vector_size)
+        if backend != self._embedding_backend or vector_size != self._vector_size:
+            self._embedding_backend = backend
             self._vector_size = vector_size
             self._vectorizer = None
+        self.engine.use_collection(collection)
 
-    def _get_vectorizer(self) -> GeminiMultimodalVectorizer:
+    def _get_vectorizer(self) -> MultimodalVectorizer:
         if self._vectorizer is None:
-            self._vectorizer = GeminiMultimodalVectorizer(
-                output_dimensionality=self._vector_size
+            self._vectorizer = create_vectorizer(
+                self._embedding_backend, self._vector_size
             )
         return self._vectorizer
 
@@ -205,13 +236,30 @@ class VideoRAGService:
         target_width: int = 512,
         enable_audio: bool = True,
         whisper_model: str = WHISPER_MODEL,
+        embedding_backend: str | None = None,
         progress_callback: Callable[[str, float], None] | None = None,
     ) -> int:
         """Fragmenta, vectoriza e indexa un vídeo en Qdrant."""
         video_path = self._resolve_video_file(video_path_or_name)
-        dim = output_dimensionality if output_dimensionality is not None else self._vector_size
-        self.set_vector_size(dim)
+        backend = (
+            embedding_backend
+            if embedding_backend is not None
+            else self._embedding_backend
+        )
+        if backend not in EMBEDDING_BACKENDS:
+            raise ValueError(
+                f"Backend de embeddings desconocido: {backend!r}. "
+                f"Opciones: {', '.join(EMBEDDING_BACKENDS)}."
+            )
+        if output_dimensionality is not None:
+            dim = output_dimensionality
+        elif backend != self._embedding_backend:
+            dim = default_dimension(backend)
+        else:
+            dim = self._vector_size
+        self.set_embedding(backend, dim)
 
+        t0 = time.perf_counter()
         chunks = await process_video_pipeline(
             str(video_path),
             max_concurrent_requests=max_concurrent,
@@ -226,20 +274,30 @@ class VideoRAGService:
             target_width=target_width,
             enable_audio=enable_audio,
             whisper_model=whisper_model,
+            embedding_backend=backend,
         )
         self.engine.create_collection(vector_size=dim)
         inserted = self.engine.insert_chunks(chunks, video_name=video_path.name)
-        logger.info("Indexación completada: %d chunks", inserted)
+        elapsed = time.perf_counter() - t0
+        self.last_index_stats = IndexStats(
+            backend=backend,
+            device_label=device_label_for(backend),
+            dimension=dim,
+            seconds=elapsed,
+            chunks=inserted,
+        )
+        logger.info("Indexación completada: %d chunks (%.2fs)", inserted, elapsed)
         return inserted
 
     @staticmethod
     def _build_query_cache_key(
         mquery: MultimodalQuery,
         vector_size: int = VECTOR_SIZE,
+        backend: str = DEFAULT_EMBEDDING_BACKEND,
     ) -> str:
-        """Calcula una clave SHA-256 determinista sobre dimensión, texto, imágenes y audios."""
+        """Calcula una clave SHA-256 determinista sobre backend, dimensión, texto, imágenes y audios."""
         hasher = hashlib.sha256()
-        hasher.update(f"dim:{vector_size}|text:".encode())
+        hasher.update(f"backend:{backend}|dim:{vector_size}|text:".encode())
         hasher.update(mquery.composed_text.encode("utf-8"))
         for img in mquery.images:
             hasher.update(b"|img:")
@@ -369,7 +427,9 @@ class VideoRAGService:
         )
         raw_fetch_k = max(fetch_k * 3, 25)
         cache_key = self._build_query_cache_key(
-            mquery, vector_size=self._vector_size
+            mquery,
+            vector_size=self._vector_size,
+            backend=self._embedding_backend,
         )
         query_vector = self._query_cache.get(cache_key)
         if query_vector is None:

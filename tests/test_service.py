@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.models import (
+    IndexStats,
     MultimodalQuery,
     RerankedResult,
     SearchResult,
@@ -33,11 +34,11 @@ def test_service_index_video_stores_vectors_in_qdrant(tmp_path: Path) -> None:
     video_file.write_bytes(b"fake-mp4")
 
     engine = QdrantSearchEngine(path=None)
-    service = VideoRAGService(engine=engine, raw_dir=raw_dir, vector_size=3)
+    service = VideoRAGService(engine=engine, raw_dir=raw_dir, vector_size=768)
 
     fake_chunks = [
-        VectorizedChunk(0, 0.0, 2.0, [1.0, 0.0, 0.0]),
-        VectorizedChunk(1, 2.0, 4.0, [0.0, 1.0, 0.0]),
+        VectorizedChunk(0, 0.0, 2.0, [1.0] + [0.0] * 767),
+        VectorizedChunk(1, 2.0, 4.0, [0.0, 1.0] + [0.0] * 766),
     ]
 
     with patch(
@@ -213,12 +214,12 @@ def test_service_reuses_lazy_clients_and_maintains_db() -> None:
     service = VideoRAGService(engine=engine, vector_size=3)
 
     with (
-        patch("src.rag_engine.service.GeminiMultimodalVectorizer") as mock_vec_cls,
+        patch("src.rag_engine.service.create_vectorizer") as mock_create_vec,
         patch("src.rag_engine.service.MultimodalReranker") as mock_rerank_cls,
     ):
         vec_instance = MagicMock()
         vec_instance.embed_text = AsyncMock(return_value=[1.0, 0.0, 0.0])
-        mock_vec_cls.return_value = vec_instance
+        mock_create_vec.return_value = vec_instance
 
         rerank_instance = MagicMock()
         rerank_instance.rerank = AsyncMock(return_value=[])
@@ -227,7 +228,7 @@ def test_service_reuses_lazy_clients_and_maintains_db() -> None:
         asyncio.run(service.search("q1", rerank=True))
         asyncio.run(service.search("q2", rerank=True))
 
-        assert mock_vec_cls.call_count == 1
+        assert mock_create_vec.call_count == 1
         assert mock_rerank_cls.call_count == 1
 
     service.delete_video("a.mp4")
@@ -536,31 +537,114 @@ def test_service_search_raises_value_error_when_audio_only_query_is_silent() -> 
     fake_vectorizer.embed_query.assert_not_called()
 
 
-def test_service_set_vector_size_updates_vectorizer_and_cache_key() -> None:
+def test_service_set_embedding_updates_vectorizer_collection_and_cache_key() -> None:
     engine = QdrantSearchEngine(path=None)
     service = VideoRAGService(engine=engine, vector_size=3072)
     assert service.vector_size == 3072
+    assert service.embedding_backend == "gemini"
 
-    with patch("src.rag_engine.service.GeminiMultimodalVectorizer") as mock_vec_cls:
+    with patch("src.rag_engine.service.create_vectorizer") as mock_create_vec:
         vec_3072 = MagicMock()
         vec_3072.embed_query = AsyncMock(return_value=[1.0, 0.0, 0.0])
         vec_1536 = MagicMock()
         vec_1536.embed_query = AsyncMock(return_value=[1.0, 0.0])
-        mock_vec_cls.side_effect = [vec_3072, vec_1536]
+        mock_create_vec.side_effect = [vec_3072, vec_1536]
 
         engine.create_collection(vector_size=3)
         engine.insert_chunks([VectorizedChunk(0, 0.0, 2.0, [1.0, 0.0, 0.0])], "v.mp4")
         asyncio.run(service.search("hola", rerank=False))
 
-        service.set_vector_size(1536)
+        service.set_embedding("gemini", 1536)
         assert service.vector_size == 1536
-        engine.create_collection(vector_size=2, recreate=True)
+        assert service.embedding_backend == "gemini"
+        assert engine.collection_name == "video_chunks__gemini__1536"
+        engine.create_collection(vector_size=2)
         engine.insert_chunks([VectorizedChunk(0, 0.0, 2.0, [1.0, 0.0])], "v.mp4")
         asyncio.run(service.search("hola", rerank=False))
 
-        assert mock_vec_cls.call_count == 2
-        assert mock_vec_cls.call_args_list[0].kwargs["output_dimensionality"] == 3072
-        assert mock_vec_cls.call_args_list[1].kwargs["output_dimensionality"] == 1536
+        assert mock_create_vec.call_count == 2
+        assert mock_create_vec.call_args_list[0].args == ("gemini", 3072)
+        assert mock_create_vec.call_args_list[1].args == ("gemini", 1536)
+
+
+def test_set_embedding_rejects_invalid_dimension_for_backend() -> None:
+    engine = QdrantSearchEngine(path=None)
+    service = VideoRAGService(engine=engine)
+    with pytest.raises(ValueError):
+        service.set_embedding("gemma2", 3072)
+
+
+def test_set_embedding_to_gemini_3072_uses_legacy_collection_name() -> None:
+    engine = QdrantSearchEngine(path=None)
+    service = VideoRAGService(engine=engine)
+    service.set_embedding("qwen3-vl-2b", 2048)
+    assert engine.collection_name == "video_chunks__qwen3-vl-2b__2048"
+    service.set_embedding("gemini", 3072)
+    assert engine.collection_name == "video_chunks"
+
+
+def test_query_cache_key_differs_by_backend() -> None:
+    q = MultimodalQuery(text="diccionarios")
+    key_gemini = VideoRAGService._build_query_cache_key(
+        q, vector_size=768, backend="gemini"
+    )
+    key_qwen = VideoRAGService._build_query_cache_key(
+        q, vector_size=768, backend="qwen3-vl-2b"
+    )
+    key_gemma = VideoRAGService._build_query_cache_key(
+        q, vector_size=768, backend="gemma2"
+    )
+    assert len({key_gemini, key_qwen, key_gemma}) == 3
+
+
+def test_index_video_passes_backend_and_records_index_stats(tmp_path: Path) -> None:
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    (raw_dir / "demo.mp4").write_bytes(b"fake-mp4")
+
+    engine = QdrantSearchEngine(path=None)
+    service = VideoRAGService(engine=engine, raw_dir=raw_dir)
+    seen_backends: list[str] = []
+
+    async def fake_pipeline(*args: Any, **kwargs: Any) -> list[VectorizedChunk]:
+        seen_backends.append(kwargs["embedding_backend"])
+        return [
+            VectorizedChunk(0, 0.0, 2.0, [1.0] + [0.0] * 767),
+            VectorizedChunk(1, 2.0, 4.0, [0.0, 1.0] + [0.0] * 766),
+        ]
+
+    with (
+        patch("src.rag_engine.service.process_video_pipeline", side_effect=fake_pipeline),
+        patch("src.rag_engine.service.device_label_for", return_value="Local MPS"),
+    ):
+        inserted = asyncio.run(
+            service.index_video(
+                "demo.mp4",
+                embedding_backend="gemma2",
+                output_dimensionality=768,
+            )
+        )
+
+    assert inserted == 2
+    assert seen_backends == ["gemma2"]
+    assert engine.collection_name == "video_chunks__gemma2__768"
+    assert isinstance(service.last_index_stats, IndexStats)
+    assert service.last_index_stats.backend == "gemma2"
+    assert service.last_index_stats.device_label == "Local MPS"
+    assert service.last_index_stats.dimension == 768
+    assert service.last_index_stats.chunks == 2
+    assert service.last_index_stats.seconds > 0.0
+
+
+def test_service_init_sets_collection_only_when_creating_engine() -> None:
+    own = VideoRAGService(db_path=None, embedding_backend="gemma2", vector_size=768)
+    assert own.engine.collection_name == "video_chunks__gemma2__768"
+
+    injected = QdrantSearchEngine(path=None, collection_name="custom")
+    svc = VideoRAGService(
+        engine=injected, embedding_backend="gemma2", vector_size=768
+    )
+    assert svc.engine.collection_name == "custom"
 
 
 
