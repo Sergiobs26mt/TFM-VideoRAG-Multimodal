@@ -17,11 +17,14 @@ from src.config import (
     RAW_DIR,
     VECTOR_SIZE,
     WHISPER_MODEL,
+    default_dimension,
+    validate_embedding_choice,
 )
 from src.config import (
     build_run_config as _build_run_config,
 )
 from src.models import (
+    IndexStats,
     QuotaSafetyError,
     RerankedResult,
     SearchResult,
@@ -139,13 +142,21 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Ancho máximo de los fotogramas en píxeles (default: 512)",
     )
     parser.add_argument(
+        "--embedding-backend",
+        choices=list(EMBEDDING_BACKENDS),
+        default=DEFAULT_EMBEDDING_BACKEND,
+        help=(
+            "Motor de embeddings "
+            f"({', '.join(EMBEDDING_BACKENDS)}; default: {DEFAULT_EMBEDDING_BACKEND})"
+        ),
+    )
+    parser.add_argument(
         "--output-dimensionality",
         type=int,
-        choices=EMBEDDING_BACKENDS[DEFAULT_EMBEDDING_BACKEND].dimensions,
-        default=VECTOR_SIZE,
+        default=None,
         help=(
             "Dimensión Matryoshka del embedding "
-            f"({', '.join(map(str, EMBEDDING_BACKENDS[DEFAULT_EMBEDDING_BACKEND].dimensions))}; default: {VECTOR_SIZE})"
+            "(por defecto: dimensión nativa del backend elegido)"
         ),
     )
     parser.add_argument(
@@ -192,16 +203,28 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Rutas a pistas de audio de consulta (.wav, .mp3, .m4a, .ogg)",
     )
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if args.output_dimensionality is None:
+        args.output_dimensionality = default_dimension(args.embedding_backend)
+    try:
+        validate_embedding_choice(args.embedding_backend, args.output_dimensionality)
+    except ValueError as exc:
+        parser.error(str(exc))
+    return args
 
 
-def build_run_config(args: argparse.Namespace) -> dict[str, Any]:
+def build_run_config(
+    args: argparse.Namespace,
+    index_stats: IndexStats | None = None,
+) -> dict[str, Any]:
     """Construye el volcado de parámetros de la ejecución para auditoría."""
     return _build_run_config(
         cli_args=vars(args),
         raw_dir=RAW_DIR,
         db_path=DB_PATH,
         vector_size=getattr(args, "output_dimensionality", VECTOR_SIZE),
+        embedding_backend=getattr(args, "embedding_backend", DEFAULT_EMBEDDING_BACKEND),
+        index_stats=index_stats,
     )
 
 
@@ -255,8 +278,18 @@ def main(argv: list[str] | None = None) -> int:
                 db_path=DB_PATH,
                 raw_dir=RAW_DIR,
                 vector_size=args.output_dimensionality,
+                embedding_backend=args.embedding_backend,
             )
             if args.index:
+                if (
+                    EMBEDDING_BACKENDS[args.embedding_backend].is_local
+                    and args.max_concurrent > 1
+                ):
+                    logger.warning(
+                        "Backend local '%s': --max-concurrent=%d ignorado; se usa concurrencia 1.",
+                        args.embedding_backend,
+                        args.max_concurrent,
+                    )
                 asyncio.run(
                     service.index_video(
                         args.video,
@@ -269,7 +302,11 @@ def main(argv: list[str] | None = None) -> int:
                         target_width=args.target_width,
                         enable_audio=not args.no_audio,
                         whisper_model=args.whisper_model,
+                        embedding_backend=args.embedding_backend,
                     )
+                )
+                auditor.save_config(
+                    build_run_config(args, index_stats=service.last_index_stats)
                 )
             if args.benchmark:
                 dataset = load_ground_truth(args.benchmark)

@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from src import main
-from src.models import RerankedResult, SearchResult, VectorizationError
+from src.models import IndexStats, RerankedResult, SearchResult, VectorizationError
 from src.utils.audit import RunAuditor
 
 
@@ -74,6 +74,7 @@ def test_parse_args_defaults() -> None:
     assert args.rerank is True
     assert args.no_audio is False
     assert args.whisper_model == "base"
+    assert args.embedding_backend == "gemini"
     assert args.output_dimensionality == 3072
 
     custom = main.parse_args(
@@ -250,4 +251,104 @@ def test_main_runs_one_shot_multimodal_search(
     assert kwargs["limit"] == 2
     out = capsys.readouterr().out
     assert "animals.mp4" in out
+
+
+def test_parse_args_resolves_default_dimension_per_backend() -> None:
+    gemma_args = main.parse_args(["--embedding-backend", "gemma2"])
+    qwen_args = main.parse_args(["--embedding-backend", "qwen3-vl-2b"])
+    assert gemma_args.output_dimensionality == 768
+    assert qwen_args.output_dimensionality == 2048
+
+
+def test_parse_args_rejects_dimension_not_valid_for_backend() -> None:
+    with pytest.raises(SystemExit):
+        main.parse_args(
+            ["--embedding-backend", "gemma2", "--output-dimensionality", "1536"]
+        )
+
+
+def test_build_run_config_includes_embedding_backend() -> None:
+    args = main.parse_args(["--embedding-backend", "qwen3-vl-2b", "--output-dimensionality", "1536"])
+    stats = IndexStats("qwen3-vl-2b", "Local MPS", 1536, 9.2, 20)
+    cfg = main.build_run_config(args, index_stats=stats)
+    assert cfg["embedding_backend"] == "qwen3-vl-2b"
+    assert cfg["embedding_dimension"] == 1536
+    assert cfg["device"] == "Local MPS"
+    assert cfg["index_seconds"] == 9.2
+
+
+def test_main_saves_config_again_with_index_stats_after_indexing(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from unittest.mock import AsyncMock
+
+    fake_service = MagicMock()
+    fake_service.index_video = AsyncMock(return_value=10)
+    fake_service.last_index_stats = IndexStats("gemma2", "Local MPS", 768, 4.5, 10)
+    fake_service.search = AsyncMock(return_value=[])
+    service_kwargs: list[dict[str, Any]] = []
+
+    def fake_service_cls(**kw: Any) -> MagicMock:
+        service_kwargs.append(kw)
+        return fake_service
+
+    monkeypatch.setattr(main, "VideoRAGService", fake_service_cls)
+    saved_configs: list[dict[str, Any]] = []
+    orig_save = RunAuditor.save_config
+
+    def spy_save(self: RunAuditor, config: dict[str, Any]) -> Path:
+        saved_configs.append(config)
+        return orig_save(self, config)
+
+    monkeypatch.setattr(RunAuditor, "save_config", spy_save)
+
+    rc = main.main(
+        [
+            "--index",
+            "--video",
+            "demo.mp4",
+            "--embedding-backend",
+            "gemma2",
+            "--query",
+            "hola",
+        ]
+    )
+    assert rc == 0
+    assert service_kwargs[0]["embedding_backend"] == "gemma2"
+    assert service_kwargs[0]["vector_size"] == 768
+    assert fake_service.index_video.call_args.kwargs["embedding_backend"] == "gemma2"
+    assert len(saved_configs) == 2
+    assert saved_configs[0]["index_seconds"] is None
+    assert saved_configs[1]["embedding_backend"] == "gemma2"
+    assert saved_configs[1]["device"] == "Local MPS"
+    assert saved_configs[1]["index_seconds"] == 4.5
+
+
+def test_main_warns_when_max_concurrent_ignored_for_local_backend(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from unittest.mock import AsyncMock
+
+    fake_service = MagicMock()
+    fake_service.index_video = AsyncMock(return_value=2)
+    fake_service.last_index_stats = IndexStats("gemma2", "Local MPS", 768, 1.0, 2)
+    fake_service.search = AsyncMock(return_value=[])
+    monkeypatch.setattr(main, "VideoRAGService", lambda **_: fake_service)
+
+    rc = main.main(
+        [
+            "--index",
+            "--embedding-backend",
+            "gemma2",
+            "--max-concurrent",
+            "4",
+            "--query",
+            "hola",
+        ]
+    )
+    assert rc == 0
+    err = capsys.readouterr().err.lower()
+    assert "concurrencia" in err and "max-concurrent" in err
 
