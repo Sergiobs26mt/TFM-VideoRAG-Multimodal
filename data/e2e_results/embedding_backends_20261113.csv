@@ -1,0 +1,4 @@
+backend,dimension,device_label,chunks,index_seconds,seconds_per_chunk,recall_at_1,recall_at_5,mrr,query_ms_mean,query_ms_median,peak_rss_mb,peak_mps_mb
+gemini,3072,Cloud API,82,,,0.8571,0.9464,0.8973,443.13,419.83,383.0,
+qwen3-vl-2b,2048,Local MPS,82,160.99,1.963,0.7500,0.9464,0.8289,158.18,142.78,2509.4,4736.5
+gemma2,768,Local MPS,82,272.99,3.329,0.7679,0.9643,0.8512,34.62,33.07,3070.0,2552.5

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import gc
 import importlib
+import io
 from collections.abc import Iterator
 from typing import Any
 
@@ -11,6 +13,9 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 from PIL import Image
+
+from src.embeddings.factory import create_vectorizer, unload_active_vectorizer
+from src.models import MultimodalQuery, VideoChunk
 
 pytestmark = pytest.mark.e2e_local
 
@@ -60,6 +65,47 @@ def _assert_finite(vector: NDArray[np.float32], size: int) -> None:
 @pytest.fixture(scope="module")
 def frames() -> list[Image.Image]:
     return [_gradient(0), _gradient(1), _gradient(2)]
+
+
+def _bgr_gradient(channel: int) -> NDArray[np.uint8]:
+    ramp = np.tile(np.linspace(0, 255, 512, dtype=np.uint8), (288, 1))
+    pixels = np.zeros((288, 512, 3), dtype=np.uint8)
+    pixels[:, :, channel] = ramp
+    return pixels
+
+
+def test_local_vectorizer_embeds_chunk_and_queries_for_each_backend() -> None:
+    """Verifica create_vectorizer con fotogramas BGR y consulta de solo imagen."""
+    if not _torch().backends.mps.is_available():
+        pytest.skip("MPS no disponible.")
+    bgr_frames = [_bgr_gradient(0), _bgr_gradient(1), _bgr_gradient(2)]
+    chunk = VideoChunk(
+        index=0,
+        start_frame=0,
+        end_frame=90,
+        start_time=0.0,
+        end_time=3.0,
+        transcript="bucle for en python",
+    )
+    buf = io.BytesIO()
+    Image.fromarray(bgr_frames[0][:, :, ::-1]).save(buf, format="JPEG")
+    image_query = MultimodalQuery(images=(buf.getvalue(),))
+
+    try:
+        for backend, dim in (("qwen3-vl-2b", 768), ("gemma2", 256)):
+            vectorizer = create_vectorizer(backend, dim)
+            vectorized = asyncio.run(vectorizer.vectorize_chunk(chunk, bgr_frames))
+            chunk_vec = np.asarray(vectorized.embedding, dtype=np.float32)
+            query_vec = np.asarray(
+                asyncio.run(vectorizer.embed_query(image_query)), dtype=np.float32
+            )
+            for vec in (chunk_vec, query_vec):
+                _assert_finite(vec, dim)
+                assert 0.99 <= float(np.linalg.norm(vec)) <= 1.01
+            del vectorizer
+            unload_active_vectorizer()
+    finally:
+        unload_active_vectorizer()
 
 
 @pytest.fixture(scope="module")
