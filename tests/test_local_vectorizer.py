@@ -131,6 +131,21 @@ def test_load_sentence_transformer_import_error_mentions_install_command(
         load_sentence_transformer("google/embeddinggemma-2", "cpu")
 
 
+def test_load_sentence_transformer_torch_import_error_raises_vectorization_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_import = importlib.import_module
+
+    def fake_import(name: str, *args: Any, **kwargs: Any) -> Any:
+        if name == "torch":
+            raise ImportError("torch ausente")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(importlib, "import_module", fake_import)
+    with pytest.raises(VectorizationError, match=r"sentence-transformers\[image\]"):
+        load_sentence_transformer("google/embeddinggemma-2", "cpu")
+
+
 def test_unknown_backend_raises_value_error() -> None:
     with pytest.raises(ValueError):
         LocalMultimodalVectorizer("gemini", FakeModel(), "cpu", 3072)
@@ -269,3 +284,34 @@ def test_vectorize_chunk_returns_vectorized_chunk_with_metadata() -> None:
 def test_vectorize_chunk_without_frames_raises_value_error() -> None:
     with pytest.raises(ValueError):
         asyncio.run(_qwen().vectorize_chunk(CHUNK, []))
+
+
+def test_gemma_empty_prompts_uses_safe_defaults() -> None:
+    vec = _gemma(FakeModel({}))
+    chunk_inputs = vec.build_chunk_input("hola", _frames())
+    query_inputs, kwargs = vec.build_query_input(
+        MultimodalQuery(text="rojo", images=(_png(_frame()),))
+    )
+    assert isinstance(chunk_inputs, dict)
+    assert chunk_inputs["text"] == "title: none | text: <|image|><|image|><|image|> hola"
+    assert isinstance(query_inputs, dict)
+    assert query_inputs["text"] == "task: search result | query: <|image|> rojo"
+    assert kwargs == {}
+
+
+def test_separate_instances_for_same_model_share_lock() -> None:
+    model = FakeModel(GEMMA_PROMPTS, delay=0.03)
+    first = _gemma(model, dim=768)
+    second = _gemma(model, dim=256)
+
+    async def run() -> None:
+        await asyncio.gather(
+            first.embed_text("q1"),
+            second.embed_text("q2"),
+            first.embed_text("q3"),
+            second.embed_text("q4"),
+        )
+
+    asyncio.run(run())
+    assert len(model.calls) == 4
+    assert model.peak == 1

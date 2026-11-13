@@ -5,6 +5,7 @@ from __future__ import annotations
 import gc
 import importlib
 import logging
+import threading
 from typing import Any
 
 from src.config import EMBEDDING_BACKENDS, validate_embedding_choice
@@ -19,8 +20,8 @@ from src.embeddings.local_vectorizer import (
 logger = logging.getLogger(__name__)
 __all__ = ["create_vectorizer", "device_label_for", "unload_active_vectorizer"]
 
-# (model_id, modelo): solo un modelo local vive en memoria a la vez
-_active: tuple[str, Any] | None = None
+# (model_id, modelo, cerrojo): solo un modelo local vive en memoria a la vez
+_active: tuple[str, Any, threading.Lock] | None = None
 
 
 def _release_memory() -> None:
@@ -69,7 +70,16 @@ def create_vectorizer(
     device = select_device()
     if _active is None or _active[0] != spec.model_id:
         unload_active_vectorizer()
-        _active = (spec.model_id, load_sentence_transformer(spec.model_id, device))
+        _active = (
+            spec.model_id,
+            load_sentence_transformer(spec.model_id, device),
+            threading.Lock(),
+        )
     return LocalMultimodalVectorizer(
-        backend, _active[1], device, output_dimensionality, target_width
+        backend,
+        _active[1],
+        device,
+        output_dimensionality,
+        target_width,
+        lock=_active[2],
     )

@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
+import time
 from typing import Any
 from unittest.mock import MagicMock
 
+import numpy as np
 import pytest
+from numpy.typing import NDArray
 
 from src.embeddings import factory
 from src.embeddings.local_vectorizer import LocalMultimodalVectorizer
@@ -118,3 +122,41 @@ def test_device_label_for_backends(monkeypatch: pytest.MonkeyPatch) -> None:
     assert factory.device_label_for("qwen3-vl-2b") == "Local MPS"
     monkeypatch.setattr(factory, "select_device", lambda: "cpu")
     assert factory.device_label_for("gemma2") == "Local CPU"
+
+
+class _SlowModel:
+    def __init__(self) -> None:
+        self.active = 0
+        self.peak = 0
+
+    def encode(
+        self, inputs: Any, convert_to_numpy: bool = True, **kwargs: Any
+    ) -> NDArray[np.float32]:
+        self.active += 1
+        self.peak = max(self.peak, self.active)
+        time.sleep(0.03)
+        self.active -= 1
+        return np.ones(2048, dtype=np.float32)
+
+
+def test_cached_model_wrappers_serialize_encode_across_dimensions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    model = _SlowModel()
+    monkeypatch.setattr(factory, "_active", None)
+    monkeypatch.setattr(factory, "select_device", lambda: "mps")
+    monkeypatch.setattr(factory, "load_sentence_transformer", lambda _m, _d: model)
+
+    first = factory.create_vectorizer("qwen3-vl-2b", 2048)
+    second = factory.create_vectorizer("qwen3-vl-2b", 768)
+
+    async def run() -> None:
+        await asyncio.gather(
+            first.embed_text("a"),
+            second.embed_text("b"),
+            first.embed_text("c"),
+            second.embed_text("d"),
+        )
+
+    asyncio.run(run())
+    assert model.peak == 1

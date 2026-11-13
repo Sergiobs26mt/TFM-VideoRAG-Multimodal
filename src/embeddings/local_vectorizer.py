@@ -31,7 +31,21 @@ __all__ = [
 
 QWEN_QUERY_INSTRUCTION = "Retrieve video segments relevant to the query."
 IMAGE_TAG = "<|image|>"
+GEMMA_DOCUMENT_PROMPT = "title: none | text: "
+GEMMA_QUERY_PROMPT = "task: search result | query: "
 _LOCAL_BACKENDS = ("qwen3-vl-2b", "gemma2")
+
+_LOCKS_GUARD = threading.Lock()
+_MODEL_LOCKS: dict[str, threading.Lock] = {}
+
+
+def _lock_for_model(model_id: str) -> threading.Lock:
+    with _LOCKS_GUARD:
+        lock = _MODEL_LOCKS.get(model_id)
+        if lock is None:
+            lock = threading.Lock()
+            _MODEL_LOCKS[model_id] = lock
+        return lock
 
 
 def _import_torch() -> Any:
@@ -53,12 +67,12 @@ def load_sentence_transformer(model_id: str, device: str) -> Any:
     """Carga un ``SentenceTransformer`` con el dtype que corresponde al dispositivo."""
     try:
         sentence_transformers = importlib.import_module("sentence_transformers")
+        torch = _import_torch()
     except ImportError as exc:
         raise VectorizationError(
             "Faltan dependencias de los embeddings locales. "
             'Ejecuta: pip install -U "sentence-transformers[image]" transformers'
         ) from exc
-    torch = _import_torch()
     try:
         return sentence_transformers.SentenceTransformer(
             model_id,
@@ -93,7 +107,8 @@ def _qwen_query(
 def _gemma_document(
     text: str, images: list[Image.Image], prompts: Mapping[str, str]
 ) -> str | dict[str, Any]:
-    tagged = f"{prompts['Document']}{IMAGE_TAG * len(images)}"
+    doc_prompt = prompts.get("Document", GEMMA_DOCUMENT_PROMPT)
+    tagged = f"{doc_prompt}{IMAGE_TAG * len(images)}"
     return {"text": f"{tagged} {text}" if text else tagged, "image": images}
 
 
@@ -105,7 +120,8 @@ def _gemma_query(
     tags = IMAGE_TAG * len(images)
     if not text:
         return {"text": tags, "image": images}, {}
-    return {"text": f"{prompts['SearchQuery']}{tags} {text}", "image": images}, {}
+    query_prompt = prompts.get("SearchQuery", GEMMA_QUERY_PROMPT)
+    return {"text": f"{query_prompt}{tags} {text}", "image": images}, {}
 
 
 class LocalMultimodalVectorizer:
@@ -118,6 +134,7 @@ class LocalMultimodalVectorizer:
         device: str,
         output_dimensionality: int,
         target_width: int = 512,
+        lock: threading.Lock | None = None,
     ) -> None:
         if backend not in _LOCAL_BACKENDS:
             raise ValueError(f"Backend local desconocido: {backend!r}.")
@@ -128,8 +145,8 @@ class LocalMultimodalVectorizer:
         self._dimensionality = output_dimensionality
         self._target_width = target_width
         self._model_id = EMBEDDING_BACKENDS[backend].model_id
-        # Un solo hilo usa el modelo a la vez, también entre bucles de eventos distintos
-        self._lock = threading.Lock()
+        # Un solo hilo usa el modelo a la vez, también entre instancias o bucles distintos
+        self._lock = lock if lock is not None else _lock_for_model(self._model_id)
 
     @property
     def backend(self) -> str:
