@@ -20,8 +20,11 @@ from src.config import (
     VECTOR_SIZE,
     WHISPER_MODEL,
     build_run_config,
+    default_dimension,
 )
+from src.embeddings.factory import device_label_for
 from src.models import (
+    IndexStats,
     MultimodalQuery,
     QuotaSafetyError,
     RerankedResult,
@@ -34,18 +37,42 @@ from src.utils.audit import RunAuditor
 
 logger = logging.getLogger(__name__)
 
-MRL_UI_OPTIONS: tuple[int, ...] = tuple(
-    sorted(EMBEDDING_BACKENDS[DEFAULT_EMBEDDING_BACKEND].dimensions, reverse=True)
-)
+BACKEND_UI_LABELS: dict[str, str] = {
+    "gemini": "Cloud: Gemini",
+    "qwen3-vl-2b": "Local: Qwen3-VL 2B",
+    "gemma2": "Local: EmbeddingGemma 2",
+}
 
 
-def build_ui_run_config() -> dict[str, Any]:
+def mrl_options(backend: str) -> tuple[int, ...]:
+    """Devuelve las dimensiones MRL válidas para el backend en orden descendente."""
+    return tuple(sorted(EMBEDDING_BACKENDS[backend].dimensions, reverse=True))
+
+
+def build_ui_run_config(
+    backend: str = DEFAULT_EMBEDDING_BACKEND,
+    vector_size: int = VECTOR_SIZE,
+    index_stats: IndexStats | None = None,
+) -> dict[str, Any]:
     """Construye la configuración de la sesión UI para auditoría."""
     return build_run_config(
         mode="streamlit_ui",
         raw_dir=RAW_DIR,
         db_path=DB_PATH,
-        vector_size=VECTOR_SIZE,
+        vector_size=vector_size,
+        embedding_backend=backend,
+        index_stats=index_stats,
+    )
+
+
+def save_embedding_config(auditor: RunAuditor, service: VideoRAGService) -> None:
+    """Actualiza run_config.json con el motor activo y las últimas estadísticas."""
+    auditor.save_config(
+        build_ui_run_config(
+            backend=service.embedding_backend,
+            vector_size=service.vector_size,
+            index_stats=service.last_index_stats,
+        )
     )
 
 
@@ -156,6 +183,7 @@ def index_video_in_ui(
     target_width: int = 512,
     enable_audio: bool = True,
     whisper_model: str = WHISPER_MODEL,
+    embedding_backend: str = DEFAULT_EMBEDDING_BACKEND,
 ) -> int:
     """Ejecuta el pipeline de indexación mostrando avance en vivo en la interfaz."""
     progress_bar = st.progress(0.0, text="Iniciando pipeline de procesamiento...")
@@ -177,6 +205,7 @@ def index_video_in_ui(
                 target_width=target_width,
                 enable_audio=enable_audio,
                 whisper_model=whisper_model,
+                embedding_backend=embedding_backend,
                 progress_callback=progress_callback,
             )
         )
@@ -185,6 +214,57 @@ def index_video_in_ui(
     except (QuotaSafetyError, VectorizationError, VectorDBError, ValueError):
         progress_bar.empty()
         raise
+
+
+def _run_sidebar_indexing(
+    *,
+    video_path: Path,
+    video_name: str,
+    spinner_label: str,
+    success_message: str,
+    error_prefix: str,
+    service: VideoRAGService,
+    auditor: RunAuditor,
+    max_concurrent: int,
+    threshold: float,
+    min_shot_frames: int,
+    entropy_stride: int,
+    jpeg_quality: int,
+    output_dimensionality: int,
+    target_width: int,
+    enable_audio: bool,
+    whisper_model: str,
+    embedding_backend: str,
+) -> None:
+    """Indexa un vídeo desde la barra lateral, actualiza la auditoría y refresca."""
+    with st.spinner(spinner_label):
+        try:
+            inserted = index_video_in_ui(
+                video_path,
+                service,
+                max_concurrent=max_concurrent,
+                threshold=threshold,
+                min_shot_frames=min_shot_frames,
+                entropy_stride=entropy_stride,
+                jpeg_quality=jpeg_quality,
+                output_dimensionality=output_dimensionality,
+                target_width=target_width,
+                enable_audio=enable_audio,
+                whisper_model=whisper_model,
+                embedding_backend=embedding_backend,
+            )
+            save_embedding_config(auditor, service)
+            st.sidebar.success(success_message.format(n=inserted))
+            st.session_state["active_video"] = video_name
+            st.rerun()
+        except (
+            QuotaSafetyError,
+            VectorizationError,
+            VectorDBError,
+            ValueError,
+            OSError,
+        ) as exc:
+            st.sidebar.error(f"{error_prefix}: {exc}")
 
 
 def render_sidebar(
@@ -218,6 +298,23 @@ def render_sidebar(
     else:
         st.sidebar.info("No hay vídeos indexados en la base de datos.")
 
+    prev_backend = service.embedding_backend
+    prev_dim = service.vector_size
+    backend_keys = list(EMBEDDING_BACKENDS)
+    default_backend_idx = (
+        backend_keys.index(prev_backend) if prev_backend in backend_keys else 0
+    )
+    p_backend = st.sidebar.selectbox(
+        "Motor de Embeddings",
+        options=backend_keys,
+        index=default_backend_idx,
+        key="embedding_backend",
+        format_func=lambda key: BACKEND_UI_LABELS[key],
+        help="Motor multimodal usado para vectorizar vídeos y consultas.",
+    )
+    backend_spec = EMBEDDING_BACKENDS[p_backend]
+    backend_caption_slot = st.sidebar.empty()
+
     with st.sidebar.expander("Parámetros de Indexación", expanded=False):
         st.markdown("**Fragmentación SSIM**")
         p_threshold = st.slider(
@@ -245,28 +342,36 @@ def render_sidebar(
         )
 
         st.markdown("**Vectorización y Red**")
+        dim_options = list(mrl_options(p_backend))
+        target_dim = (
+            service.vector_size
+            if p_backend == prev_backend
+            else default_dimension(p_backend)
+        )
         default_dim_idx = (
-            MRL_UI_OPTIONS.index(service.vector_size)
-            if service.vector_size in MRL_UI_OPTIONS
-            else 0
+            dim_options.index(target_dim) if target_dim in dim_options else 0
         )
         p_output_dimensionality = int(
             st.selectbox(
                 "Dimensión Matryoshka (MRL)",
-                options=list(MRL_UI_OPTIONS),
+                options=dim_options,
                 index=default_dim_idx,
-                help=(
-                    "Dimensiones oficiales recomendadas para Gemini Embedding 2 "
-                    "(3072 nativa; 1536 y 768 truncadas con normalización L2)."
-                ),
+                key=f"mrl_dim_{p_backend}",
+                help="Dimensiones soportadas por el motor activo con normalización L2.",
             )
         )
         p_max_concurrent = st.slider(
             "Concurrencia máxima API",
             min_value=1,
             max_value=10,
-            value=3,
-            help="Peticiones simultáneas a Gemini (3 para capa gratuita de 30K TPM).",
+            value=1 if backend_spec.is_local else 3,
+            key=f"max_concurrent_{p_backend}",
+            disabled=backend_spec.is_local,
+            help=(
+                "Los modelos locales ejecutan 1 chunk cada vez para proteger la memoria unificada."
+                if backend_spec.is_local
+                else "Peticiones simultáneas a Gemini (3 para capa gratuita de 30K TPM)."
+            ),
         )
         p_jpeg_quality = st.slider(
             "Calidad JPEG fotogramas",
@@ -282,7 +387,7 @@ def render_sidebar(
             max_value=1280,
             value=512,
             step=64,
-            help="Redimensiona los fotogramas clave antes de enviarlos a Gemini. 512px reduce ~60% los tokens y previene el error 429.",
+            help="Redimensiona los fotogramas clave antes de vectorizar (512 px reduce memoria y tráfico).",
         )
 
         st.markdown("**Transcripción de Audio (ASR)**")
@@ -299,37 +404,51 @@ def render_sidebar(
             help="Modelo local de OpenAI Whisper para reconocimiento de voz.",
         )
 
+    service.set_embedding(p_backend, p_output_dimensionality)
+    caption_lines = [
+        f"Modelo: `{backend_spec.model_id}` | Dispositivo: {device_label_for(p_backend)}"
+    ]
+    stats = service.last_index_stats
+    if (
+        stats is not None
+        and stats.backend == p_backend
+        and stats.dimension == p_output_dimensionality
+    ):
+        sec_per_chunk = stats.seconds / stats.chunks if stats.chunks > 0 else 0.0
+        caption_lines.append(
+            f"Última indexación: {stats.chunks} chunks en {stats.seconds:.1f} s "
+            f"({sec_per_chunk:.2f} s/chunk)"
+        )
+    backend_caption_slot.caption("\n\n".join(caption_lines))
+
+    # Sync sidebar video list immediately when switching backend or MRL dimension.
+    if (p_backend, p_output_dimensionality) != (prev_backend, prev_dim):
+        st.rerun()
+
     if selected_video and st.sidebar.button(
-        "Re-indexar vídeo seleccionado", use_container_width=True
+        "Re-indexar vídeo seleccionado", width="stretch"
     ):
         target_path = RAW_DIR / selected_video
         if target_path.is_file():
-            with st.spinner(f"Re-indexando {selected_video}..."):
-                try:
-                    n = index_video_in_ui(
-                        target_path,
-                        service,
-                        max_concurrent=p_max_concurrent,
-                        threshold=p_threshold,
-                        min_shot_frames=p_min_shot_frames,
-                        entropy_stride=p_entropy_stride,
-                        jpeg_quality=p_jpeg_quality,
-                        output_dimensionality=p_output_dimensionality,
-                        target_width=p_target_width,
-                        enable_audio=p_enable_audio,
-                        whisper_model=p_whisper_model,
-                    )
-                    st.sidebar.success(f"Re-indexados {n} chunks de '{selected_video}'.")
-                    st.session_state["active_video"] = selected_video
-                    st.rerun()
-                except (
-                    QuotaSafetyError,
-                    VectorizationError,
-                    VectorDBError,
-                    ValueError,
-                    OSError,
-                ) as e:
-                    st.sidebar.error(f"Error al re-indexar: {e}")
+            _run_sidebar_indexing(
+                video_path=target_path,
+                video_name=selected_video,
+                spinner_label=f"Re-indexando {selected_video}...",
+                success_message=f"Re-indexados {{n}} chunks de '{selected_video}'.",
+                error_prefix="Error al re-indexar",
+                service=service,
+                auditor=auditor,
+                max_concurrent=p_max_concurrent,
+                threshold=p_threshold,
+                min_shot_frames=p_min_shot_frames,
+                entropy_stride=p_entropy_stride,
+                jpeg_quality=p_jpeg_quality,
+                output_dimensionality=p_output_dimensionality,
+                target_width=p_target_width,
+                enable_audio=p_enable_audio,
+                whisper_model=p_whisper_model,
+                embedding_backend=p_backend,
+            )
         else:
             st.sidebar.error(f"El archivo {selected_video} no existe en data/raw/.")
 
@@ -344,34 +463,26 @@ def render_sidebar(
             options=unindexed_raw,
             help="Archivos presentes en la carpeta local data/raw/ que aún no tienen vectores en Qdrant.",
         )
-        if st.sidebar.button(f"Indexar '{chosen_raw}'", use_container_width=True):
-            target_path = RAW_DIR / chosen_raw
-            with st.spinner(f"Indexando {chosen_raw}..."):
-                try:
-                    n = index_video_in_ui(
-                        target_path,
-                        service,
-                        max_concurrent=p_max_concurrent,
-                        threshold=p_threshold,
-                        min_shot_frames=p_min_shot_frames,
-                        entropy_stride=p_entropy_stride,
-                        jpeg_quality=p_jpeg_quality,
-                        output_dimensionality=p_output_dimensionality,
-                        target_width=p_target_width,
-                        enable_audio=p_enable_audio,
-                        whisper_model=p_whisper_model,
-                    )
-                    st.sidebar.success(f"Indexados {n} chunks de '{chosen_raw}'.")
-                    st.session_state["active_video"] = chosen_raw
-                    st.rerun()
-                except (
-                    QuotaSafetyError,
-                    VectorizationError,
-                    VectorDBError,
-                    ValueError,
-                    OSError,
-                ) as e:
-                    st.sidebar.error(f"Error al indexar: {e}")
+        if st.sidebar.button(f"Indexar '{chosen_raw}'", width="stretch"):
+            _run_sidebar_indexing(
+                video_path=RAW_DIR / chosen_raw,
+                video_name=chosen_raw,
+                spinner_label=f"Indexando {chosen_raw}...",
+                success_message=f"Indexados {{n}} chunks de '{chosen_raw}'.",
+                error_prefix="Error al indexar",
+                service=service,
+                auditor=auditor,
+                max_concurrent=p_max_concurrent,
+                threshold=p_threshold,
+                min_shot_frames=p_min_shot_frames,
+                entropy_stride=p_entropy_stride,
+                jpeg_quality=p_jpeg_quality,
+                output_dimensionality=p_output_dimensionality,
+                target_width=p_target_width,
+                enable_audio=p_enable_audio,
+                whisper_model=p_whisper_model,
+                embedding_backend=p_backend,
+            )
 
     st.sidebar.markdown("---")
 
@@ -385,39 +496,31 @@ def render_sidebar(
     if uploaded_file is not None:
         dest_path = RAW_DIR / uploaded_file.name
         if st.sidebar.button(
-            f"Guardar e Indexar '{uploaded_file.name}'", use_container_width=True
+            f"Guardar e Indexar '{uploaded_file.name}'", width="stretch"
         ):
             RAW_DIR.mkdir(parents=True, exist_ok=True)
             with open(dest_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
             st.sidebar.success(f"Archivo guardado en data/raw/{uploaded_file.name}")
-
-            with st.spinner(f"Indexando {uploaded_file.name}..."):
-                try:
-                    n = index_video_in_ui(
-                        dest_path,
-                        service,
-                        max_concurrent=p_max_concurrent,
-                        threshold=p_threshold,
-                        min_shot_frames=p_min_shot_frames,
-                        entropy_stride=p_entropy_stride,
-                        jpeg_quality=p_jpeg_quality,
-                        output_dimensionality=p_output_dimensionality,
-                        target_width=p_target_width,
-                        enable_audio=p_enable_audio,
-                        whisper_model=p_whisper_model,
-                    )
-                    st.sidebar.success(f"Completado: {n} chunks indexados.")
-                    st.session_state["active_video"] = uploaded_file.name
-                    st.rerun()
-                except (
-                    QuotaSafetyError,
-                    VectorizationError,
-                    VectorDBError,
-                    ValueError,
-                    OSError,
-                ) as e:
-                    st.sidebar.error(f"Error en el proceso: {e}")
+            _run_sidebar_indexing(
+                video_path=dest_path,
+                video_name=uploaded_file.name,
+                spinner_label=f"Indexando {uploaded_file.name}...",
+                success_message="Completado: {n} chunks indexados.",
+                error_prefix="Error en el proceso",
+                service=service,
+                auditor=auditor,
+                max_concurrent=p_max_concurrent,
+                threshold=p_threshold,
+                min_shot_frames=p_min_shot_frames,
+                entropy_stride=p_entropy_stride,
+                jpeg_quality=p_jpeg_quality,
+                output_dimensionality=p_output_dimensionality,
+                target_width=p_target_width,
+                enable_audio=p_enable_audio,
+                whisper_model=p_whisper_model,
+                embedding_backend=p_backend,
+            )
 
     st.sidebar.markdown("---")
 
@@ -509,7 +612,8 @@ def main() -> None:
     st.markdown('<div class="main-header">Video RAG Multimodal</div>', unsafe_allow_html=True)
     st.markdown(
         '<div class="sub-header">Recuperación semántica de eventos en vídeo mediante '
-        "embeddings multimodales continuos (Google Gemini Embedding 2 + Qdrant)</div>",
+        "embeddings multimodales (Gemini Embedding 2, Qwen3-VL-Embedding 2B y "
+        "EmbeddingGemma 2 + Qdrant)</div>",
         unsafe_allow_html=True,
     )
 

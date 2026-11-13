@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.config import EMBEDDING_BACKENDS
-from src.models import MultimodalQuery, SearchResult
+from src.models import IndexStats, MultimodalQuery, SearchResult
 from src.ui import app as ui_app
 
 
@@ -138,9 +138,31 @@ def test_build_ui_run_config() -> None:
     """Verifica que build_ui_run_config genera los parámetros esperados."""
     config = ui_app.build_ui_run_config()
     assert config["mode"] == "streamlit_ui"
+    assert config["embedding_backend"] == "gemini"
     assert config["vector_size"] == 3072
     assert "chunking_defaults" in config
     assert "vectorizer_defaults" in config
+
+
+def test_build_ui_run_config_records_index_stats() -> None:
+    """Verifica que build_ui_run_config incluye estadísticas de indexación."""
+    stats = IndexStats(
+        backend="gemma2",
+        device_label="Apple MPS (bfloat16)",
+        dimension=768,
+        seconds=12.5,
+        chunks=10,
+    )
+    config = ui_app.build_ui_run_config(
+        backend="gemma2",
+        vector_size=768,
+        index_stats=stats,
+    )
+    assert config["embedding_backend"] == "gemma2"
+    assert config["vector_size"] == 768
+    assert config["embedding_dimension"] == 768
+    assert config["device"] == "Apple MPS (bfloat16)"
+    assert config["index_seconds"] == 12.5
 
 
 def test_execute_search_truncates_to_limit() -> None:
@@ -224,9 +246,57 @@ def test_execute_search_accepts_multimodal_query() -> None:
     )
 
 
-def test_ui_exposes_official_mrl_dimensions() -> None:
-    assert ui_app.MRL_UI_OPTIONS == (3072, 1536, 768)
-    assert set(ui_app.MRL_UI_OPTIONS) == set(EMBEDDING_BACKENDS["gemini"].dimensions)
+def test_mrl_options_per_backend() -> None:
+    assert ui_app.mrl_options("gemini") == (3072, 1536, 768)
+    assert ui_app.mrl_options("qwen3-vl-2b") == (2048, 1536, 768)
+    assert ui_app.mrl_options("gemma2") == (768, 512, 256)
+
+
+def test_backend_ui_labels_cover_all_backends() -> None:
+    assert set(ui_app.BACKEND_UI_LABELS) == set(EMBEDDING_BACKENDS)
+
+
+def test_index_video_in_ui_forwards_embedding_backend(tmp_path: Path) -> None:
+    dummy_video = tmp_path / "gemma.mp4"
+    dummy_video.write_bytes(b"data")
+
+    mock_service = MagicMock()
+    mock_service.index_video = AsyncMock(return_value=4)
+
+    with patch("src.ui.app.st.progress"):
+        n = ui_app.index_video_in_ui(
+            dummy_video,
+            mock_service,
+            embedding_backend="gemma2",
+            output_dimensionality=768,
+        )
+
+    assert n == 4
+    kwargs = mock_service.index_video.call_args.kwargs
+    assert kwargs["embedding_backend"] == "gemma2"
+    assert kwargs["output_dimensionality"] == 768
+
+
+def test_save_embedding_config_writes_backend_and_stats() -> None:
+    mock_auditor = MagicMock()
+    mock_service = MagicMock()
+    mock_service.embedding_backend = "qwen3-vl-2b"
+    mock_service.vector_size = 2048
+    mock_service.last_index_stats = IndexStats(
+        backend="qwen3-vl-2b",
+        device_label="Apple MPS (bfloat16)",
+        dimension=2048,
+        seconds=25.0,
+        chunks=8,
+    )
+
+    ui_app.save_embedding_config(mock_auditor, mock_service)
+
+    mock_auditor.save_config.assert_called_once()
+    saved = mock_auditor.save_config.call_args.args[0]
+    assert saved["embedding_backend"] == "qwen3-vl-2b"
+    assert saved["device"] == "Apple MPS (bfloat16)"
+    assert saved["index_seconds"] == 25.0
 
 
 
