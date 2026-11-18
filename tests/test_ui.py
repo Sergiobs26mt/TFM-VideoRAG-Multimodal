@@ -299,4 +299,130 @@ def test_save_embedding_config_writes_backend_and_stats() -> None:
     assert saved["index_seconds"] == 25.0
 
 
+def _app_entrypoint() -> Path:
+    return Path(__file__).resolve().parent.parent / "app.py"
+
+
+def _build_mock_service(indexed: list[str]) -> MagicMock:
+    service = MagicMock()
+    service.embedding_backend = "gemini"
+    service.vector_size = 3072
+    service.last_index_stats = None
+
+    def _set_embedding(backend: str, dim: int) -> None:
+        service.embedding_backend = backend
+        service.vector_size = dim
+
+    service.set_embedding.side_effect = _set_embedding
+    service.get_indexed_videos.return_value = list(indexed)
+    return service
+
+
+def test_app_renders_empty_state_and_opens_ingest_dialog(tmp_path: Path) -> None:
+    """Verifica el estado vacío accionable y la apertura del diálogo de ingesta."""
+    from streamlit.testing.v1 import AppTest
+
+    mock_service = _build_mock_service([])
+    mock_auditor = MagicMock()
+    mock_auditor.run_dir = tmp_path
+
+    with (
+        patch("src.ui.app.get_rag_service", return_value=mock_service),
+        patch("src.ui.app.get_auditor", return_value=mock_auditor),
+        patch("src.ui.app.RAW_DIR", tmp_path),
+    ):
+        at = AppTest.from_file(_app_entrypoint(), default_timeout=15)
+        at.run()
+        assert not at.exception
+        assert [t.value for t in at.title] == ["Video RAG Multimodal"]
+        assert any("No hay vídeos indexados" in str(info.value) for info in at.info)
+
+        ingest_btn = next(b for b in at.button if "Indexar primer vídeo" in b.label)
+        ingest_btn.click().run()
+        assert not at.exception
+
+
+def test_app_search_displays_results_and_jumps_timestamp(tmp_path: Path) -> None:
+    """Verifica búsqueda multimodal, tarjetas de hallazgos y salto de código de tiempo."""
+    from streamlit.testing.v1 import AppTest
+
+    from src.models import RerankedResult
+
+    (tmp_path / "animals.mp4").write_bytes(b"fake-mp4")
+    mock_service = _build_mock_service(["animals.mp4"])
+    mock_service.last_resolved_query = None
+    mock_service.search = AsyncMock(
+        return_value=[
+            RerankedResult(
+                result=SearchResult(
+                    score=0.89,
+                    video_name="animals.mp4",
+                    chunk_index=3,
+                    start_time=24.0,
+                    end_time=31.0,
+                    transcript="el león ruge en la sabana",
+                ),
+                relevance_score=0.94,
+                is_relevant=True,
+                reasoning="Coincide visual y acústicamente.",
+            )
+        ]
+    )
+    mock_auditor = MagicMock()
+    mock_auditor.run_dir = tmp_path
+
+    with (
+        patch("src.ui.app.get_rag_service", return_value=mock_service),
+        patch("src.ui.app.get_auditor", return_value=mock_auditor),
+        patch("src.ui.app.RAW_DIR", tmp_path),
+    ):
+        at = AppTest.from_file(_app_entrypoint(), default_timeout=15)
+        at.run()
+        assert not at.exception
+
+        at.text_input[0].set_value("león rugiendo").run()
+        search_btn = next(b for b in at.button if "Buscar evento" in b.label)
+        search_btn.click().run()
+        assert not at.exception
+        assert any("00:24.0 - 00:31.0" in m.value for m in at.markdown)
+
+        jump_btn = next(b for b in at.button if "Ir a 00:24.0" in b.label)
+        jump_btn.click().run()
+        assert not at.exception
+        assert at.session_state["play_time"] == 24
+        assert at.session_state["active_video"] == "animals.mp4"
+
+
+def test_app_switches_backend_and_requires_maintenance_confirmation(tmp_path: Path) -> None:
+    """Verifica cambio de motor por segmented_control y confirmación de borrado."""
+    from streamlit.testing.v1 import AppTest
+
+    (tmp_path / "animals.mp4").write_bytes(b"fake-mp4")
+    mock_service = _build_mock_service(["animals.mp4"])
+    mock_auditor = MagicMock()
+    mock_auditor.run_dir = tmp_path
+
+    with (
+        patch("src.ui.app.get_rag_service", return_value=mock_service),
+        patch("src.ui.app.get_auditor", return_value=mock_auditor),
+        patch("src.ui.app.RAW_DIR", tmp_path),
+    ):
+        at = AppTest.from_file(_app_entrypoint(), default_timeout=15)
+        at.run()
+        assert not at.exception
+
+        at.sidebar.segmented_control[0].set_value("gemma2").run()
+        assert not at.exception
+        assert mock_service.embedding_backend == "gemma2"
+        assert mock_service.vector_size == 768
+
+        maint_btn = next(
+            b for b in at.sidebar.button if "Mantenimiento de base de datos" in b.label
+        )
+        maint_btn.click().run()
+        assert not at.exception
+        mock_service.clear_database.assert_not_called()
+
+
+
 

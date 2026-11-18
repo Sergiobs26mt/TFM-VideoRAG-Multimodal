@@ -1,0 +1,58 @@
+[theme]
+font = "'IBM Plex Sans':https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
+headingFont = "'IBM Plex Sans':https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@600;700&display=swap"
+codeFont = "'JetBrains Mono':https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap"
+baseFontSize = 15
+baseFontWeight = 400
+codeFontSize = "0.85rem"
+headingFontSizes = ["1.75rem", "1.35rem", "1.1rem", "0.95rem", "0.875rem", "0.8rem"]
+headingFontWeights = [600, 600, 600, 600, 500, 500]
+baseRadius = "0.375rem"
+buttonRadius = "0.375rem"
+showWidgetBorder = true
+showSidebarBorder = true
+linkUnderline = false
+paddingTop = "1.25rem"
+paddingBottom = "2rem"
+
+[theme.sidebar]
+paddingTop = "1rem"
+paddingBottom = "1.5rem"
+
+[theme.light]
+primaryColor = "#0B57D0"
+backgroundColor = "#F7F8FA"
+secondaryBackgroundColor = "#ECEFF4"
+textColor = "#111827"
+borderColor = "#CBD5E1"
+codeBackgroundColor = "#E2E8F0"
+codeTextColor = "#9A3412"
+linkColor = "#0B57D0"
+
+[theme.light.sidebar]
+backgroundColor = "#ECEFF4"
+secondaryBackgroundColor = "#F7F8FA"
+textColor = "#111827"
+borderColor = "#CBD5E1"
+primaryColor = "#0B57D0"
+codeBackgroundColor = "#E2E8F0"
+codeTextColor = "#9A3412"
+
+[theme.dark]
+primaryColor = "#0369A1"
+backgroundColor = "#0D1117"
+secondaryBackgroundColor = "#161C24"
+textColor = "#ECF2F8"
+borderColor = "#2D3748"
+codeBackgroundColor = "#1E2631"
+codeTextColor = "#FBBF24"
+linkColor = "#38BDF8"
+
+[theme.dark.sidebar]
+backgroundColor = "#121720"
+secondaryBackgroundColor = "#1A222D"
+textColor = "#ECF2F8"
+borderColor = "#2D3748"
+primaryColor = "#0369A1"
+codeBackgroundColor = "#1E2631"
+codeTextColor = "#FBBF24"
